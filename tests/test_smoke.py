@@ -10,7 +10,7 @@ from models.device import select_device
 
 def test_dataset_registry_has_sst2_and_mmlu() -> None:
     assert set(data_reg.list_datasets()) == {"sst2", "mmlu"}
-    assert model_reg.list_models() == []
+    assert model_reg.list_models() == ["mistral-7b-instruct-v0.3", "qwen3.5-1.5b-instruct"]
     assert aug_reg.list_augmenters() == []
 
 

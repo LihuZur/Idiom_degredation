@@ -12,7 +12,7 @@ def register_model(
     name: str,
     *,
     hf_repo: str,
-    revision: str | None = None,
+    revision: str,
     kind: ModelKind = "decoder",
     default_precision: Precision = "bf16",
 ) -> Callable[[type[Model]], type[Model]]:

@@ -5,11 +5,11 @@ from typing import Any, Literal, Protocol, runtime_checkable
 
 from data.base import DatasetRow
 
-Variant = Literal["paraphrase", "idiomatic"]
+Variant = Literal["original", "paraphrase", "idiomatic"]
 
 
 @dataclass(frozen=True, slots=True)
-class AugmentedExample:
+class AugmentedRow:
     """One row of an augmented variant. Aligned to its `original` row by `id`."""
 
     id: str
@@ -23,7 +23,7 @@ class AugmentedExample:
 
 @dataclass(frozen=True, slots=True)
 class ValidationResult:
-    """Per-validator outcome for a single `AugmentedExample`."""
+    """Per-validator outcome for a single `AugmentedRow`."""
 
     name: str
     passed: bool
@@ -38,7 +38,7 @@ class Augmenter(Protocol):
     variant: Variant
     augmenter_model: str
 
-    def augment(self, ex: DatasetRow) -> AugmentedExample: ...
+    def augment(self, ex: DatasetRow) -> AugmentedRow: ...
 
 
 @runtime_checkable
@@ -47,4 +47,4 @@ class Validator(Protocol):
 
     name: str
 
-    def validate(self, ex: AugmentedExample) -> ValidationResult: ...
+    def validate(self, ex: AugmentedRow) -> ValidationResult: ...

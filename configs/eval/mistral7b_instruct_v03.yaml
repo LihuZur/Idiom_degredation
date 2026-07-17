@@ -1,0 +1,10 @@
+# Configuration for Mistral 7B Instruct v0.3 model
+model: mistral-7b-instruct-v0.3
+seed: 0
+precision: bf16
+decoding:
+  temperature: 0.0
+  max_new_tokens: 32
+  do_sample: false
+batch:
+  size: 8
