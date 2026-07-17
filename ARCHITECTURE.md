@@ -63,9 +63,9 @@ Key points:
 **Responsibilities**
 
 - Load raw datasets from Hugging Face (`sst2`, `mmlu`).
-- Normalize into a shared in-memory schema (`Example` = `id`, `x`, `y`,
-  `meta`, `split`).
-- Provide deterministic splits (train / val / test) and caching.
+- Normalize into a shared in-memory schema (`DatasetRow` = `id`, `x`, `y`,
+  `meta`).
+- Provide deterministic loading and caching.
 - Expose each dataset through a **registry** so new datasets can be added
   without touching any other module.
 
@@ -88,7 +88,7 @@ def register_dataset(name: str) -> Callable[[type[DatasetLoader]], type[DatasetL
 ```python
 class DatasetLoader(Protocol):
     name: str
-    def load(self, split: str) -> Iterable[Example]: ...
+    def load(self) -> Iterable[DatasetRow]: ...
 ```
 
 ### 2.2 `cleaning/` — Stage 1: filter & normalize → cleaned CSV
@@ -119,7 +119,7 @@ class DatasetLoader(Protocol):
 ```python
 class Cleaner(Protocol):
     dataset: str
-    def clean(self, examples: Iterable[Example]) -> Iterable[Example]: ...
+    def clean(self, examples: Iterable[DatasetRow]) -> Iterable[DatasetRow]: ...
     # writes datasets_out/{dataset}_original.csv
 ```
 
@@ -170,7 +170,7 @@ def register_augmenter(name: str) -> Callable[[type[Augmenter]], type[Augmenter]
 class Augmenter(Protocol):
     variant: Literal["paraphrase", "idiomatic"]
     augmenter_model: str
-    def augment(self, ex: Example) -> AugmentedExample: ...
+    def augment(self, ex: DatasetRow) -> AugmentedExample: ...
 
 class Validator(Protocol):
     def validate(self, ex: AugmentedExample) -> ValidationResult: ...
@@ -353,12 +353,10 @@ per original task with the three variant inputs and their predictions.
 | `variant` | enum{`original`,`paraphrase`,`idiomatic`} | Which variant this row is |
 | `x` | str | Input text for this variant |
 | `y` | any | Label (unchanged across variants) |
-| `split` | enum{`train`,`val`,`test`} | Source split |
-| `source_x` | str | Original `x` (redundant on `original`, kept for traceability) |
-| `augmenter_model` | str | LLM name/version used (null for `original`) |
-| `prompt_hash` | str | Hash of the exact prompt template used (null for `original`) |
-| `validators` | dict / JSON | Per-validator scores and pass/fail flags |
 | `meta` | dict / JSON | Dataset-specific fields (e.g. MMLU choices, subject) |
+| `augmenter_model` | str | LLM name/version used (empty for `original`) |
+| `prompt_hash` | str | Hash of the exact prompt template used (empty for `original`) |
+| `validators` | dict / JSON | Per-validator scores and pass/fail flags (empty for `original`) |
 
 Result files are laid out **per-dataset**, with one JSON file per model
 inside the dataset's folder:
@@ -404,7 +402,7 @@ the cross-model, cross-dataset delta tables.
 ## 5. Interfaces (summary)
 
 ```python
-Cleaner.clean(Iterable[Example])       -> Iterable[Example]      # Stage 1
+Cleaner.clean(Iterable[DatasetRow])    -> Iterable[DatasetRow]   # Stage 1
 Augmenter.augment(Example)              -> AugmentedExample       # Stage 2
 Validator.validate(AugmentedExample)    -> ValidationResult       # Stage 2
 Model.predict(list[FormattedInput])     -> list[Prediction]       # decoder

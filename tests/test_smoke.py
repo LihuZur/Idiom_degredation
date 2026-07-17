@@ -8,8 +8,8 @@ from models import registry as model_reg
 from models.device import select_device
 
 
-def test_registries_start_empty() -> None:
-    assert data_reg.list_datasets() == []
+def test_dataset_registry_has_sst2_and_mmlu() -> None:
+    assert set(data_reg.list_datasets()) == {"sst2", "mmlu"}
     assert model_reg.list_models() == []
     assert aug_reg.list_augmenters() == []
 

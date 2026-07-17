@@ -3,7 +3,7 @@
 from collections.abc import Iterable
 from typing import Protocol, runtime_checkable
 
-from data.base import Example
+from data.base import DatasetRow
 
 
 @runtime_checkable
@@ -12,7 +12,7 @@ class Cleaner(Protocol):
 
     dataset: str
 
-    def clean(self, examples: Iterable[Example]) -> Iterable[Example]:
+    def clean(self, examples: Iterable[DatasetRow]) -> Iterable[DatasetRow]:
         """Yield the retained + normalized examples.
 
         Implementations are also responsible for writing

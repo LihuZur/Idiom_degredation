@@ -305,13 +305,16 @@ Removal is symmetric: delete the file and any configs that reference it.
 All commands assume the project env is active (`uv sync` once, then either
 `source .venv/bin/activate` or prefix each command with `uv run`).
 
+The project is installed in editable mode (`pyproject.toml [project.scripts]`),
+so each stage runs as a short `uv run idiom-<stage>` console command.
+
 ```bash
 # Stage 1 — Clean a raw dataset into an aligned CSV of task rows
-uv run python scripts/clean.py --config configs/clean/sst2.yaml
+uv run idiom-clean --config configs/clean/sst2.yaml
 # → datasets_out/sst2_original.csv
 
 # Stage 2 — Given a cleaned CSV and an augmenter model, produce both variants
-uv run python scripts/augment.py \
+uv run idiom-augment \
     --input     datasets_out/sst2_original.csv \
     --augmenter <augmenter-model-id>
 # → datasets_out/sst2_paraphrase.csv, datasets_out/sst2_idiomatic.csv
@@ -320,17 +323,17 @@ uv run python scripts/augment.py \
 # uv run python scripts/train_encoder.py --config configs/encoder/sst2_bert_base.yaml
 
 # Stage 3 — Run one model on the full (original + paraphrase + idiomatic) triple
-uv run python scripts/eval.py \
+uv run idiom-eval \
     --dataset sst2 \
     --model   <decoder-model-id>
 # → results/sst2/<model-id>.json  (per-variant metrics + paired per-task rows)
 
 # Post-Stage-3 — Aggregate across models & datasets, emit Plotly figures
-uv run python scripts/analyze.py --results results/
+uv run idiom-analyze --results results/
 
 # Per-dataset cross-model chart — compare every model that ran on `sst2`
 # across its original / paraphrase / idiomatic variants
-uv run python scripts/plot_dataset.py --dataset sst2
+uv run idiom-plot-dataset --dataset sst2
 # → analysis/figures/sst2_cross_model.html (+ .png)
 #   analysis/tables/sst2_cross_model.csv
 ```

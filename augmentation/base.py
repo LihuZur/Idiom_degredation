@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol, runtime_checkable
 
-from data.base import Example, Split
+from data.base import DatasetRow
 
 Variant = Literal["paraphrase", "idiomatic"]
 
@@ -16,8 +16,6 @@ class AugmentedExample:
     variant: Variant
     x: str
     y: Any
-    split: Split
-    source_x: str
     augmenter_model: str
     prompt_hash: str
     meta: dict[str, Any] = field(default_factory=dict[str, Any])
@@ -40,7 +38,7 @@ class Augmenter(Protocol):
     variant: Variant
     augmenter_model: str
 
-    def augment(self, ex: Example) -> AugmentedExample: ...
+    def augment(self, ex: DatasetRow) -> AugmentedExample: ...
 
 
 @runtime_checkable

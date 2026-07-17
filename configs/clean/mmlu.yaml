@@ -1,0 +1,18 @@
+dataset: mmlu
+seed: 0
+
+hf_revision: c30699e8356da336a370243923dbaf21066bb9fe
+
+length:
+  min_tokens: 10
+  max_tokens: 100
+
+max_rows: 2000
+
+normalize:
+  - nfc
+  - collapse_whitespace
+
+dedupe: true
+
+# subjects: null   # reserved for future subject filtering; ignored today

@@ -4,28 +4,31 @@
 dataset: sst2               # must match a name registered in data/registry.py
 seed: 0
 
-# Length band (in whitespace-separated tokens). Rows outside are dropped:
+# Pinned HF dataset revision (required — missing pin is a hard error).
+hf_revision: <sha>
+
+# Length band (in whitespace-separated tokens, computed on normalized `x`).
+# Rows outside are dropped:
 # - too short → no room for idioms
 # - too long  → wastes augmentation budget, dilutes the effect
 length:
   min_tokens: 5
   max_tokens: 60
 
-# Optional cap per split for compute budget.
-max_rows_per_split:
-  train: null
-  val: null
-  test: 2000
+# Optional cap on total row count for compute budget (applied after shuffle).
+max_rows: 2000
 
-# Text normalization toggles.
+# Ordered list of normalizer names, applied in order. Each name must be
+# registered in cleaning/normalize.py's NORMALIZERS registry. Empty list is
+# a legal no-op.
 normalize:
-  strip_markup: true
-  strip_control_chars: true
-  strip_urls: true
-  normalize_whitespace: true
-  normalize_quotes: true
+  - nfc
+  - collapse_whitespace
 
-# Dedupe rows whose normalized `x` collides.
+# Dedupe rows whose (normalized `x`, meta, y) collides.
 dedupe: true
+
+# MMLU-only, reserved for future subject filtering; ignored today.
+# subjects: null
 
 # Output written to datasets_out/{dataset}/original.csv (schema: ARCHITECTURE §3).

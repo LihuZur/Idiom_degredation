@@ -1,0 +1,16 @@
+dataset: sst2
+seed: 0
+
+hf_revision: 8d51e7e4887a4caaa95b3fbebbf53c0490b58bbb
+
+length:
+  min_tokens: 10
+  max_tokens: 100
+
+max_rows: 2000
+
+normalize:
+  - nfc
+  - collapse_whitespace
+
+dedupe: true
