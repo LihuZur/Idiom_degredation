@@ -1,0 +1,140 @@
+[project]
+name = "idiom-degradation"
+version = "0.1.0"
+description = "NLP research project measuring how much decoder LLM accuracy degrades on classification/QA benchmarks when inputs are rewritten as (a) neutral paraphrases and (b) idiom-heavy paraphrases."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Proprietary" }
+authors = [{ name = "Lihu Zur" }]
+
+# NOTE: torch is intentionally pinned via the default PyPI wheel here. If a
+# specific CUDA build is required on a Linux/NVIDIA machine, override via a
+# per-machine `uv` index configuration. On macOS (Apple Silicon), the default
+# wheel already ships with MPS support.
+dependencies = [
+    "transformers>=4.44",
+    "datasets>=3.0",
+    "huggingface-hub>=0.24",
+    "torch>=2.4",
+    "pandas>=2.2",
+    "pydantic>=2.8",
+    "pyyaml>=6.0",
+    "plotly>=5.24",
+    "kaleido>=0.2.1",
+    "tqdm>=4.66",
+    "click>=8.1",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.7",
+    "pyright>=1.1.380",
+    "pre-commit>=3.8",
+    "pytest>=8.3",
+    "types-pyyaml>=6.0",
+]
+
+# This repo is an application (multi-package layout: data/, cleaning/, ...),
+# not a distributable library. Tell uv to skip building a wheel.
+[tool.uv]
+package = false
+
+# ---------------------------------------------------------------------------
+# Ruff — single source of truth for lint & format (README §9.1, §9.6).
+# ---------------------------------------------------------------------------
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+extend-exclude = [
+    ".venv",
+    "datasets_out",
+    "results",
+    "analysis/figures",
+    "analysis/tables",
+    "local",
+]
+
+[tool.ruff.format]
+docstring-code-format = true
+
+[tool.ruff.lint]
+select = [
+    "E",     # pycodestyle errors
+    "W",     # pycodestyle warnings
+    "F",     # pyflakes
+    "I",     # isort
+    "B",     # flake8-bugbear
+    "UP",    # pyupgrade
+    "SIM",   # flake8-simplify
+    "C4",    # flake8-comprehensions
+    "N",     # pep8-naming
+    "PL",    # pylint subset
+    "RUF",   # ruff-specific
+    "TID",   # flake8-tidy-imports (banned-api + banned-module-level-imports)
+    "PTH",   # flake8-use-pathlib
+    "ANN",   # flake8-annotations (public-API typing)
+]
+ignore = [
+    "ANN401",  # allow typing.Any where explicitly used (rare)
+    "ANN101",  # deprecated: `self` needs no annotation (PEP 673)
+    "ANN102",  # deprecated: `cls` needs no annotation
+    "PLR0913", # too-many-arguments; runners legitimately take many
+    "E501",    # line-length handled by formatter
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["ANN", "PLR2004"]
+"scripts/**" = ["ANN"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+# Ban matplotlib / seaborn imports repo-wide (README §9.6).
+# TID251 catches `import matplotlib`, `from matplotlib import ...`, etc.
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"matplotlib".msg = "matplotlib is banned in this repo — use plotly (README §9.6)."
+"matplotlib.pyplot".msg = "matplotlib is banned in this repo — use plotly (README §9.6)."
+"seaborn".msg = "seaborn is banned in this repo — use plotly (README §9.6)."
+
+# TID253 additionally forbids these as module-level imports.
+[tool.ruff.lint.flake8-tidy-imports]
+banned-module-level-imports = ["matplotlib", "seaborn"]
+
+# ---------------------------------------------------------------------------
+# Pyright — strict typing (README §9.1).
+# ---------------------------------------------------------------------------
+[tool.pyright]
+typeCheckingMode = "strict"
+pythonVersion = "3.12"
+pythonPlatform = "All"
+include = [
+    "data",
+    "cleaning",
+    "augmentation",
+    "models",
+    "eval",
+    "analysis",
+    "scripts",
+    "tests",
+]
+exclude = [
+    "**/__pycache__",
+    ".venv",
+    "datasets_out",
+    "results",
+    "analysis/figures",
+    "analysis/tables",
+    "local",
+]
+reportMissingTypeStubs = false  # HF / torch ship partial stubs; would spam.
+reportUnknownMemberType = "warning"
+reportUnknownVariableType = "warning"
+reportUnknownArgumentType = "warning"
+
+# ---------------------------------------------------------------------------
+# Pytest
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"

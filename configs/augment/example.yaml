@@ -1,0 +1,33 @@
+# Stage 2 (augmentation) config — one file per dataset lives here as
+# configs/augment/{dataset}.yaml. This example.yaml documents the schema.
+
+dataset: sst2
+seed: 0
+
+# Registered augmenter id (see augmentation/registry.py). The augmenter is
+# an external hosted LLM, not an HF model (README §9.7).
+augmenter: null   # TBD; see README §12 open decisions
+
+# Frozen prompt template filenames under augmentation/prompts/.
+# Hashes of the resolved templates are logged on every emitted row
+# (README §11 "prompt leakage" mitigation).
+prompts:
+  paraphrase: paraphrase_v1.txt
+  idiomatic:  idiomatic_v1.txt
+
+# Validator thresholds (ARCHITECTURE §2.3).
+validators:
+  semantic_similarity:
+    embedding_model: null   # TBD
+    min_cosine: 0.80
+  label_preservation:
+    method: llm_judge       # or a task-specific heuristic
+  idiom_presence:            # applied to `idiomatic` variant
+    method: llm_judge
+  idiom_absence:             # applied to `paraphrase` variant (control)
+    method: llm_judge
+
+# Response cache — keyed by (prompt_hash, augmenter_model, input_id).
+cache:
+  enabled: true
+  dir: .hf_cache/augment

@@ -1,0 +1,31 @@
+# Stage 1 (cleaning) config — one file per dataset lives here as
+# configs/clean/{dataset}.yaml. This example.yaml documents the schema.
+
+dataset: sst2               # must match a name registered in data/registry.py
+seed: 0
+
+# Length band (in whitespace-separated tokens). Rows outside are dropped:
+# - too short → no room for idioms
+# - too long  → wastes augmentation budget, dilutes the effect
+length:
+  min_tokens: 5
+  max_tokens: 60
+
+# Optional cap per split for compute budget.
+max_rows_per_split:
+  train: null
+  val: null
+  test: 2000
+
+# Text normalization toggles.
+normalize:
+  strip_markup: true
+  strip_control_chars: true
+  strip_urls: true
+  normalize_whitespace: true
+  normalize_quotes: true
+
+# Dedupe rows whose normalized `x` collides.
+dedupe: true
+
+# Output written to datasets_out/{dataset}/original.csv (schema: ARCHITECTURE §3).

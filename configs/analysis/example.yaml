@@ -1,0 +1,18 @@
+# Analysis config — one file per analysis group lives here as
+# configs/analysis/{group}.yaml. This example.yaml documents the schema.
+
+group: default
+results_dir: results
+
+# Paired bootstrap significance tests over per-example correctness
+# (README §6, ARCHITECTURE §2.7).
+bootstrap:
+  n_resamples: 10000
+  ci: 0.95
+  seed: 0
+
+# Per-dataset cross-model figure config (ARCHITECTURE §2.7).
+per_dataset_cross_model:
+  fail_on_missing_variant: true
+  # Written to analysis/figures/{dataset}_cross_model.{html,png}
+  # and    analysis/tables/{dataset}_cross_model.csv.

@@ -213,3 +213,15 @@ __marimo__/
 
 # Local-only files
 local/
+
+# Pipeline outputs (Stage 1/2 CSVs, Stage 3 result JSONs, analysis artifacts)
+datasets_out/
+results/
+analysis/figures/
+analysis/tables/
+
+# HF caches (may be redirected here via HF_HOME)
+.hf_cache/
+
+# Pyright / other type-checker caches
+.pyright/

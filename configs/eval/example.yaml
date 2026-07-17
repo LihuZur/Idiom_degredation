@@ -1,0 +1,25 @@
+# Stage 3 (evaluation) config — one file per (dataset, model) pair lives
+# here as configs/eval/{dataset}_{model}.yaml. This example.yaml documents
+# the schema.
+
+dataset: sst2
+model: qwen3.5-7b-instruct   # must match a name registered in models/registry.py
+seed: 0
+
+# Deterministic decoding for eval (README §11, §6).
+decoding:
+  temperature: 0.0
+  max_new_tokens: 32
+
+# Batching + precision. Runner picks device via models.device.select_device()
+# and falls back to fp32 on CPU (README §9.4).
+batch:
+  size: 8
+
+# Which variant CSVs to run. Defaults to the full triple.
+variants:
+  - original
+  - paraphrase
+  - idiomatic
+
+# Output: results/{dataset}/{model}.json (schema: ARCHITECTURE §3).
