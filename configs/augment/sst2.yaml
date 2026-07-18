@@ -1,0 +1,26 @@
+# Stage 2 (augmentation) config for sst2. See configs/augment/example.yaml
+# for the full annotated schema.
+
+dataset: sst2
+seed: 0
+
+augmenter: identity
+
+prompts:
+  paraphrase: paraphrase_v1.txt
+  idiomatic:  idiomatic_v1.txt
+
+validators:
+  semantic_similarity:
+    embedding_model: null
+    min_cosine: 0.80
+  label_preservation:
+    method: llm_judge
+  idiom_presence:
+    method: llm_judge
+  idiom_absence:
+    method: llm_judge
+
+cache:
+  enabled: true
+  dir: .hf_cache/augment

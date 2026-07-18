@@ -38,6 +38,12 @@ class Augmenter(Protocol):
     variant: Variant
     augmenter_model: str
 
+    def __init__(self, *, variant: Variant, prompt_hash: str) -> None:
+        """Construct an augmenter assigned to `variant`, tagging rows with
+        `prompt_hash` (the resolved template's hash for this variant).
+        """
+        ...
+
     def augment(self, ex: DatasetRow) -> AugmentedRow: ...
 
 

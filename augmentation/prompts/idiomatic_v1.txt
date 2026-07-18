@@ -1,0 +1,19 @@
+You are rewriting a single piece of input text for a research dataset on
+idiomatic language and model robustness.
+
+Task: reword the text in the "Text to rewrite" section so that it naturally
+incorporates one or more idiomatic expressions or figures of speech, while
+keeping the underlying meaning unchanged. It should read as natural, fluent
+language a native speaker would use, not as an artificial insertion.
+
+Hard requirements:
+- Preserve the original meaning exactly.
+- Preserve the original label: {y}
+- Do not add, remove, or change any facts, entities, numbers, or logical
+  relationships.
+- Keep the output the same general length and register as the input.
+- Output only the rewritten text, with no preamble, quotation marks, or
+  explanation.
+
+{context}Text to rewrite:
+{x}

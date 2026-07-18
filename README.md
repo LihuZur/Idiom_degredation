@@ -313,11 +313,13 @@ so each stage runs as a short `uv run idiom-<stage>` console command.
 uv run idiom-clean --config configs/clean/sst2.yaml
 # → datasets_out/sst2_original.csv
 
-# Stage 2 — Given a cleaned CSV and an augmenter model, produce both variants
-uv run idiom-augment \
-    --input     datasets_out/sst2_original.csv \
-    --augmenter <augmenter-model-id>
-# → datasets_out/sst2_paraphrase.csv, datasets_out/sst2_idiomatic.csv
+# Stage 2 — Given a config (dataset, augmenter id, prompts, validators), produce both variants
+uv run idiom-augment --config configs/augment/sst2.yaml
+# → datasets_out/sst2/paraphrase.csv, datasets_out/sst2/idiomatic.csv
+#   (+ paraphrase.meta.json / idiomatic.meta.json sidecars)
+
+# Or run every registered dataset in one pass (requires configs/augment/{dataset}.yaml for each)
+uv run idiom-augment --all
 
 # (Future work — encoder track, deferred) Fine-tune before Stage 3
 # uv run python scripts/train_encoder.py --config configs/encoder/sst2_bert_base.yaml

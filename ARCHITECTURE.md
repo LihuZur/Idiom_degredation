@@ -168,16 +168,29 @@ def register_augmenter(name: str) -> Callable[[type[Augmenter]], type[Augmenter]
 
 ```python
 class Augmenter(Protocol):
-    variant: Literal["paraphrase", "idiomatic"]
+    variant: Variant
     augmenter_model: str
-    def augment(self, ex: DatasetRow) -> AugmentedExample: ...
+    def __init__(self, *, variant: Variant, prompt_hash: str) -> None: ...
+    def augment(self, ex: DatasetRow) -> AugmentedRow: ...
 
 class Validator(Protocol):
-    def validate(self, ex: AugmentedExample) -> ValidationResult: ...
-
-def run_stage2(cleaned_csv: Path, augmenter_model: str) -> tuple[Path, Path]:
-    """Returns (paraphrase_csv_path, idiomatic_csv_path)."""
+    def validate(self, ex: AugmentedRow) -> ValidationResult: ...
 ```
+
+Stage 2 is orchestrated by `AugmentPipeline` (no `run_stage2` free function —
+inlined into the class, the same pattern used for Stage 3 in §2.6):
+
+```python
+class AugmentPipeline:
+    def __init__(self, cfg: AugmentConfig, input_csv: Path, out_dir: Path, config_path: Path) -> None: ...
+    def run(self) -> tuple[Path, Path]:
+        """Returns (paraphrase_csv_path, idiomatic_csv_path)."""
+```
+
+Driven by the `idiom-augment` CLI (`scripts/augment.py`), which is
+config-driven via `configs/augment/{dataset}.yaml` — `--config` for a single
+dataset, `--all` to run every registered dataset (each requires its own
+`configs/augment/{dataset}.yaml`).
 
 ### 2.4 `datasets_out/` — persisted stage artifacts
 
@@ -188,7 +201,9 @@ def run_stage2(cleaned_csv: Path, augmenter_model: str) -> tuple[Path, Path]:
 - All three files share the row schema in §3 and are aligned by `id`.
 - Versioning is handled via an optional `_v{n}` suffix when a dataset is
   regenerated (e.g. `sst2_paraphrase_v2.csv`); the active version per
-  experiment is pinned in the experiment config.
+  experiment is pinned in the experiment config. *(Future work; not
+  implemented in the current identity-augmenter phase — Stage 2 always
+  writes the unversioned `paraphrase.csv` / `idiomatic.csv`.)*
 
 ### 2.5 `models/` — model registry & runners
 

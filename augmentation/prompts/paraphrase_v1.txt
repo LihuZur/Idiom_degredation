@@ -1,0 +1,19 @@
+You are rewriting a single piece of input text for a research dataset on
+idiomatic language and model robustness.
+
+Task: reword the text in the "Text to rewrite" section into a neutral
+paraphrase that expresses the same meaning using plain, literal language. Do
+NOT use any idioms, figures of speech, or figurative expressions — every
+phrase must be interpretable literally.
+
+Hard requirements:
+- Preserve the original meaning exactly.
+- Preserve the original label: {y}
+- Do not add, remove, or change any facts, entities, numbers, or logical
+  relationships.
+- Keep the output the same general length and register as the input.
+- Output only the rewritten text, with no preamble, quotation marks, or
+  explanation.
+
+{context}Text to rewrite:
+{x}

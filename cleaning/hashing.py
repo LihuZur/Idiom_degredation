@@ -14,3 +14,8 @@ def config_hash(resolved_config: dict[str, Any]) -> str:
     """Return the first 16 hex chars of the sha256 of the canonical config JSON."""
     digest = hashlib.sha256(canonical_json(resolved_config).encode("utf-8")).hexdigest()
     return digest[:16]
+
+
+def prompt_hash(text: str) -> str:
+    """First 16 hex chars of sha256 of the raw template text (UTF-8)."""
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
