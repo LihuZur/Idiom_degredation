@@ -90,7 +90,7 @@ Trimmed subset of the original proposal, with new families added:
 
 ## 5. Pipeline Overview
 
-The flow is split into three explicit, independently runnable stages. Each
+The flow is split into four explicit, independently runnable stages. Each
 stage consumes files on disk and produces new files on disk, so any stage can
 be re-run without repeating the others.
 
@@ -104,11 +104,23 @@ be re-run without repeating the others.
 │ (original tasks) │   │      ↓           │   │ per-variant metrics  │
 │                  │   │ paraphrase.csv   │   │ + paired per-task    │
 │                  │   │ idiomatic.csv    │   │ predictions          │
-└──────────────────┘   └──────────────────┘   └──────────────────────┘
+└──────────────────┘   └──────────────────┘   └──────────┬───────────┘
+                                                          │
+                                                          ▼
+                                              ┌──────────────────────┐
+                                              │ Stage 4: Visualize    │
+                                              │                      │
+                                              │ result JSONs         │
+                                              │      ↓               │
+                                              │ deltas, comparison   │
+                                              │ tables, Plotly       │
+                                              │ figures              │
+                                              └──────────────────────┘
 ```
 
-After Stage 3, an optional cross-run **analysis** step aggregates results
-across models and datasets and computes deltas / significance.
+Stage 4 is a cross-run step: it aggregates result files across models and
+datasets, computes deltas / significance, and emits comparison tables and
+Plotly figures. It reads only Stage 3 outputs, so it can be re-run on its own.
 
 ### Stage 1 — Clean
 
@@ -152,19 +164,22 @@ Encoder models are first fine-tuned (see phases below); decoders run
 zero / few-shot with dataset-specific prompt formats. Both tracks share the
 same Stage 3 entrypoint.
 
-### Analysis (post-Stage-3)
+### Stage 4 — Visualize
 
 Aggregate result files across models and datasets, compute
 Δ<sub>paraphrase</sub> and Δ<sub>idiom</sub>, run paired bootstrap
-significance tests, and produce comparison tables and plots.
+significance tests, and produce comparison tables and Plotly figures
+(`analysis/tables/`, `analysis/figures/`). Runs on Stage 3 outputs only, so it
+is re-runnable independently of the earlier stages.
 
 ## 6. Metrics
 
 - Each dataset uses the metric defined in its original paper (accuracy for
   SST-2 and MMLU).
 - Cross-variant reporting: Δ<sub>paraphrase</sub>, Δ<sub>idiom</sub>.
-- **Significance**: paired bootstrap resampling over examples to compare
-  variants within the same model.
+- **Significance**: delta confidence intervals from a paired bootstrap over
+  examples, and delta p-values from McNemar's exact test (`scipy`) on the
+  paired per-example correctness — comparing variants within the same model.
 
 ## 7. Phases & Milestones
 
@@ -193,7 +208,7 @@ Idiom_degredation/
 ├── datasets_out/              # persisted CSVs: {dataset}_{variant}.csv
 ├── models/                    # model registry (encoder + decoder loaders)
 ├── eval/                      # Stage 3: run one model on a variant triple
-├── analysis/                  # cross-run aggregation, deltas, Plotly figures
+├── analysis/                  # Stage 4: cross-run aggregation, deltas, Plotly figures
 ├── scripts/                   # CLI entrypoints (one per stage)
 └── tests/                     # unit tests for pipelines & metrics
 ```
@@ -281,8 +296,9 @@ Removal is symmetric: delete the file and any configs that reference it.
 - **Plotly only** for all charts, tables, and dashboards (`plotly.express`
   or `plotly.graph_objects`). **matplotlib / seaborn are not permitted** in
   this repo; a ruff rule bans the import.
-- Figures are saved as both interactive `.html` and static `.png`
-  (via `plotly` + `kaleido`) under `analysis/figures/`.
+- Figures are saved as interactive `.html` under `analysis/figures/`.
+  **HTML only for this phase** — static `.png` export (via `plotly` +
+  `kaleido`) is deferred to future work (§13).
 
 ### 9.7 Models & datasets sourcing
 
@@ -330,14 +346,45 @@ uv run idiom-eval \
     --model   <decoder-model-id>
 # → results/sst2/<model-id>.json  (per-variant metrics + paired per-task rows)
 
-# Post-Stage-3 — Aggregate across models & datasets, emit Plotly figures
-uv run idiom-analyze --results results/
+# Stage 4 — Visualize: three flags-only CLIs, no --config file.
+# Bootstrap params (--n-resamples, --ci, --seed) are shared across all three.
+
+# Aggregate every result file into one summary table (tables only, no figures)
+uv run idiom-analyze \
+    --results results/ \
+    --out-dir analysis/tables/ \
+    --n-resamples 10000 \
+    --ci 0.95 \
+    --seed 0 \
+    --force
+# → analysis/tables/summary.{csv,md} (+ summary.meta.json)
 
 # Per-dataset cross-model chart — compare every model that ran on `sst2`
 # across its original / paraphrase / idiomatic variants
-uv run idiom-plot-dataset --dataset sst2
-# → analysis/figures/sst2_cross_model.html (+ .png)
-#   analysis/tables/sst2_cross_model.csv
+uv run idiom-plot-dataset \
+    --dataset sst2 \
+    --results results/ \
+    --out-dir analysis/figures/ \
+    --n-resamples 10000 \
+    --ci 0.95 \
+    --seed 0 \
+    --force
+# → analysis/figures/sst2_cross_model.html
+#   analysis/tables/sst2_cross_model.{csv,md} (+ .meta.json)
+
+# Or every dataset with a result folder, in one pass
+uv run idiom-plot-dataset --all --results results/ --out-dir analysis/figures/
+
+# Cross-dataset summary chart — grouped delta bars across all datasets & models
+uv run idiom-plot-summary \
+    --results results/ \
+    --out-dir analysis/figures/ \
+    --n-resamples 10000 \
+    --ci 0.95 \
+    --seed 0 \
+    --force
+# → analysis/figures/cross_dataset_summary.html
+#   analysis/tables/cross_dataset_summary.{csv,md} (+ .meta.json)
 ```
 
 ## 11. Risks & Mitigations
@@ -373,3 +420,5 @@ stay consistent when we come back to them:
   (original-only vs. also on paraphrase / idiomatic training data).
 - **Third dataset** — one additional dataset may be added later, up to the
   admin cap of 3.
+- **PNG export for figures (kaleido)** — Stage 4 figures are HTML-only for
+  this phase; static `.png` export via `plotly` + `kaleido` is deferred.

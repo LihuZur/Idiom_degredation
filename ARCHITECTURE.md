@@ -10,9 +10,9 @@ YAML configs, so any stage can be re-run independently.
 
 ## 1. System Overview
 
-The pipeline is a sequence of three explicit stages, each runnable in
-isolation and communicating only through CSVs on disk. A post-pipeline
-analysis step aggregates results across runs.
+The pipeline is a sequence of four explicit stages, each runnable in
+isolation and communicating only through files on disk. Stage 4 is a
+cross-run step that aggregates results and produces tables and figures.
 
 ```mermaid
 %%{init: {
@@ -30,7 +30,7 @@ flowchart TB
     Di[("idiomatic.csv")]
     E["Stage 3 — Evaluate<br/>variant triple + eval model"]
     R[("results/&lcub;ds&rcub;/&lcub;model&rcub;.json")]
-    AN["Analysis<br/>aggregation · deltas · plots"]
+    AN["Stage 4 — Visualize<br/>aggregation · deltas · plots"]
     RP["Report<br/>tables & figures"]
 
     A  --> C  --> Do
@@ -53,6 +53,9 @@ Key points:
 - **Stage 3** takes a variant triple plus an evaluated model id and runs the
   same task prompt on all three CSVs, joining per-example predictions by `id`
   for paired comparisons.
+- **Stage 4** reads Stage 3 result files (across models / datasets), computes
+  per-variant deltas and significance, and emits comparison tables and Plotly
+  figures. It touches no model or dataset, so it is re-runnable on its own.
 - Every artifact (cleaned row, augmented row, result file) records the
   config hash and model / prompt versions that produced it.
 
@@ -278,53 +281,97 @@ def run_stage3(dataset: str, model_id: str) -> Path:
     """Runs the model on all three variants and returns the result JSON path."""
 ```
 
-### 2.7 `analysis/` — aggregation & statistics
+### 2.7 `analysis/` — Stage 4: aggregation, statistics & visualization
 
 **Responsibilities**
 
 - Join per-run results across (model × dataset × variant).
-- Compute Δ<sub>paraphrase</sub>, Δ<sub>idiom</sub> per (model, dataset).
-- Paired bootstrap significance tests over per-example correctness.
-- Generate summary tables (CSV / Markdown) and **Plotly** figures.
-- **Per-dataset cross-model view.** Given a single dataset (implicitly its
-  variant triple: `original` + `paraphrase` + `idiomatic`), produce one
-  visualisation that compares **every model that has a result file for that
-  dataset**. This is the primary chart used to answer the central question
-  on a per-dataset basis.
+- Compute Δ<sub>paraphrase</sub>, Δ<sub>idiom</sub> per (model, dataset), each
+  with a paired-bootstrap confidence interval and a two-sided p-value.
+- `aggregate()` returns one row per (dataset, model) as a `pandas.DataFrame`.
+- Generate summary tables (CSV / Markdown) and **Plotly** figures, driven by
+  **three flags-only CLIs** (no `--config` file; bootstrap params —
+  `--n-resamples`, `--ci`, `--seed` — are plain CLI flags):
+  - `idiom-analyze` — cross-run summary table only, **no figures**.
+  - `idiom-plot-dataset` — per-dataset cross-model figure + companion table
+    (supports `--all` to run every dataset with a `results/{dataset}/`
+    folder).
+  - `idiom-plot-summary` — cross-dataset summary figure + companion table.
+- Reads **Stage 3 result files only** (`results/{dataset}/{model}.json`), so
+  it is independently re-runnable without touching any earlier stage.
+- **Fails loudly** if a model's result set is missing any of the three
+  variants, so every chart/table always reflects a complete triple.
 
-**Per-dataset cross-model visualisation**
+**Significance**
 
-- **Input:** dataset name; scans `results/{dataset}/*.json` and loads all
-  matching model results.
-- **Output:** `analysis/figures/{dataset}_cross_model.{html,png}` — an
-  interactive Plotly figure with:
-  - one grouped bar per model, showing the metric on all three variants
-    (`original`, `paraphrase`, `idiomatic`) side by side;
+- Delta point estimate + percentile **confidence interval** from a paired
+  bootstrap over each example's `correct` boolean (`scipy.stats.bootstrap` with
+  `paired=True` over a single vector statistic, so one shared set of resampled
+  indices drives the per-variant accuracy CIs and the delta CIs alike).
+- Delta **p-value**: McNemar's exact two-sided test on the discordant pairs,
+  via `scipy.stats.binomtest(min(b, c), b + c, 0.5)` — the standard
+  significance test for paired binary (correct/incorrect) outcomes. When there
+  are no discordant pairs (e.g. the identity phase) the p-value is `1.0`.
+
+**Per-dataset cross-model visualisation** (`idiom-plot-dataset`)
+
+- **Input:** a dataset name (or `--all`); scans `results/{dataset}/*.json`
+  and loads all matching model results.
+- **Output:** `analysis/figures/{dataset}_cross_model.html` — an interactive
+  Plotly figure with:
+  - one grouped bar per model, showing accuracy on all three variants
+    (`original`, `paraphrase`, `idiomatic`) side by side, each with a
+    bootstrap-CI error bar;
   - overlaid Δ<sub>paraphrase</sub> and Δ<sub>idiom</sub> annotations per
     model;
-  - error bars from the paired bootstrap CIs;
-  - hover text listing model revision and `config_hash` for traceability.
+  - hover text listing `model_revision` and `config_hash` for traceability.
 - Also emits a companion table
-  `analysis/tables/{dataset}_cross_model.csv` with one row per model and
-  columns for each variant's metric, both deltas, and their CIs.
-- Fails loudly if any listed model is missing one of the three variants,
-  so the chart always reflects a complete triple.
+  `analysis/tables/{dataset}_cross_model.{csv,md}` (+ `.meta.json` sidecar)
+  with one row per model and columns for each variant's accuracy, both
+  deltas, and their CIs / p-values.
+
+**Cross-dataset summary visualisation** (`idiom-plot-summary`)
+
+- **Input:** every dataset under `results/`.
+- **Output:** `analysis/figures/cross_dataset_summary.html` — a grouped
+  delta-bar Plotly figure comparing Δ<sub>paraphrase</sub> and
+  Δ<sub>idiom</sub> across every (dataset, model) pair, for a bird's-eye view
+  of the central question.
+- Companion table `analysis/tables/cross_dataset_summary.{csv,md}`
+  (+ `.meta.json`).
+
+**Provenance.** Every table is written with a sidecar `{name}.meta.json`
+recording tool versions, a UTC timestamp, the bootstrap params
+(`n_resamples`, `ci`, `seed`), and the `config_hash` / `model_revision` /
+`prompt_hash` / `dataset` of every source result file that fed the table.
 
 **Visualisation rule.** All charts, tables, and dashboards use **Plotly**
 (`plotly.express` / `plotly.graph_objects`) — matplotlib / seaborn are
 banned in this repo (see README §9.6). A ruff rule blocks `import matplotlib`
-and `import seaborn`. Figures are written to `analysis/figures/` as both
-interactive `.html` and static `.png` (via `plotly` + `kaleido`).
+and `import seaborn`. Figures are **HTML only for this phase** — static
+`.png` export (via `plotly` + `kaleido`) is deferred to future work
+(README §13).
 
 **Interface**
 
 ```python
-def aggregate(results_dir: Path) -> AggregateTable: ...
+def aggregate(
+    results_dir: Path, *, n_resamples: int, ci: float, seed: int
+) -> pd.DataFrame:
+    """One row per (dataset, model): per-variant accuracy, both deltas,
+    delta confidence intervals, and delta p-values."""
 
-def plot_dataset_cross_model(dataset: str, results_dir: Path) -> Path:
-    """Build the per-dataset cross-model Plotly figure covering all three
-    variants for every model with a result file for `dataset`. Returns the
-    path to the written HTML figure (PNG written alongside)."""
+def plot_dataset_cross_model(
+    dataset: str, results_dir: Path, *, n_resamples: int, ci: float, seed: int
+) -> Path:
+    """Build the per-dataset cross-model Plotly figure (HTML) covering all
+    three variants for every model with a result file for `dataset`."""
+
+def plot_cross_dataset_summary(
+    results_dir: Path, *, n_resamples: int, ci: float, seed: int
+) -> Path:
+    """Build the cross-dataset grouped delta-bar Plotly figure (HTML) across
+    every (dataset, model) pair."""
 ```
 
 ### 2.8 `configs/` — experiment configuration
@@ -334,7 +381,9 @@ def plot_dataset_cross_model(dataset: str, results_dir: Path) -> Path:
   - `configs/augment/{dataset}.yaml`    — Stage 2 (augmenter model, prompts,
     validator thresholds)
   - `configs/eval/{dataset}_{model}.yaml`    — Stage 3 run config
-  - `configs/analysis/{group}.yaml`     — post-run aggregation
+  - Stage 4 (`analysis/`) is **flags-only** — no `configs/analysis/` YAML;
+    its CLIs take bootstrap params (`--n-resamples`, `--ci`, `--seed`) and
+    I/O paths directly as flags (see §2.7).
 - Every config carries a seed and pins model / prompt versions.
 
 ### 2.9 `scripts/` — CLI entrypoints
@@ -346,9 +395,15 @@ One thin CLI wrapper per pipeline stage, plus analysis:
   paraphrase + idiomatic CSVs)
 - `scripts/eval.py`          — Stage 3 (dataset + eval model → result JSON
   covering all three variants)
-- `scripts/analyze.py`       — post-run aggregation across models & datasets
-- `scripts/plot_dataset.py`  — given a dataset name, build the per-dataset
-  cross-model Plotly figure over all three variants (see §2.7)
+- `scripts/analyze.py`       — implemented flags-only CLI (`idiom-analyze`):
+  post-run aggregation across models & datasets into `analysis/tables/`
+  (tables only, no figures; see §2.7)
+- `scripts/plot_dataset.py`  — implemented flags-only CLI
+  (`idiom-plot-dataset`): given a dataset name (or `--all`), build the
+  per-dataset cross-model Plotly figure over all three variants (see §2.7)
+- `scripts/plot_summary.py`  — implemented flags-only CLI
+  (`idiom-plot-summary`): build the cross-dataset summary figure of grouped
+  deltas across all datasets & models (see §2.7)
 
 ### 2.10 `tests/`
 
@@ -423,6 +478,8 @@ Validator.validate(AugmentedExample)    -> ValidationResult       # Stage 2
 Model.predict(list[FormattedInput])     -> list[Prediction]       # decoder
 Evaluator.run_variant(Model, csv)       -> RunResult              # Stage 3, one variant
 run_stage3(dataset, model_id)           -> result JSON path       # Stage 3, full triple
+aggregate(results_dir, *, n_resamples,
+          ci, seed)                     -> pd.DataFrame           # Stage 4, one row per (dataset, model)
 ```
 
 The uniform `Model` interface keeps Stage 3, metrics, and analysis code
@@ -457,7 +514,7 @@ The authoritative statement of engineering standards lives in
 | Pre-commit | ruff + pyright hooks | Blocks merges on type or lint errors |
 | GPU | `select_device()` helper | Runners never hard-code `"cuda"` |
 | Extensibility | Registries in `data/`, `models/`, `augmentation/` | New dataset / model = 1 file + decorator, no runner edits |
-| Visualisation | Plotly only | `analysis/` outputs interactive HTML + static PNG |
+| Visualisation | Plotly only | `analysis/` outputs interactive HTML (PNG via kaleido deferred, README §13) |
 | Sourcing | Hugging Face only in current phase | No `source` discriminator on registries; augmenter runs a separate external-API code path |
 
 ## 8. Open Architectural Decisions
