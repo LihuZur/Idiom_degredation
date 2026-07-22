@@ -12,7 +12,8 @@ def _valid_dict(dataset: str = "sst2") -> dict[str, Any]:
     return {
         "dataset": dataset,
         "seed": 0,
-        "augmenter": "identity",
+        "augmenter": "gemini",
+        "augmenter_model": "gemini-2.5-pro-002",
         "prompts": {"paraphrase": "paraphrase_v1.txt", "idiomatic": "idiomatic_v1.txt"},
         "validators": {
             "semantic_similarity": {"embedding_model": None, "min_cosine": 0.80},
@@ -28,7 +29,8 @@ def test_valid_sst2_shaped_dict_parses() -> None:
     cfg = AugmentConfig.model_validate(_valid_dict("sst2"))
     assert cfg.dataset == "sst2"
     assert cfg.seed == 0
-    assert cfg.augmenter == "identity"
+    assert cfg.augmenter == "gemini"
+    assert cfg.augmenter_model == "gemini-2.5-pro-002"
     assert cfg.prompts.paraphrase == "paraphrase_v1.txt"
     assert cfg.prompts.idiomatic == "idiomatic_v1.txt"
     assert cfg.validators.semantic_similarity.min_cosine == 0.80
@@ -55,6 +57,13 @@ def test_unknown_augmenter_name_rejected() -> None:
         AugmentConfig.model_validate(raw)
 
 
+def test_missing_augmenter_model_rejected() -> None:
+    raw = _valid_dict()
+    del raw["augmenter_model"]
+    with pytest.raises(ValidationError):
+        AugmentConfig.model_validate(raw)
+
+
 def test_defaults_applied_when_validators_and_cache_omitted() -> None:
     raw = _valid_dict()
     del raw["validators"]
@@ -63,6 +72,17 @@ def test_defaults_applied_when_validators_and_cache_omitted() -> None:
     assert cfg.validators.semantic_similarity.min_cosine == 0.80
     assert cfg.cache.enabled is True
     assert cfg.cache.dir == ".hf_cache/augment"
+
+
+def test_defaults_applied_when_decoding_judge_retry_omitted() -> None:
+    raw = _valid_dict()
+    cfg = AugmentConfig.model_validate(raw)
+    assert cfg.decoding.temperature == 0.7
+    assert cfg.decoding.max_output_tokens == 512
+    assert cfg.judge.temperature == 0.0
+    assert cfg.judge.max_output_tokens == 16
+    assert cfg.retry.max_attempts == 3
+    assert cfg.retry.backoff_seconds == 2.0
 
 
 def test_unknown_nested_prompts_key_rejected() -> None:

@@ -1,0 +1,18 @@
+You are a strict validator for a research dataset on idiomatic language and
+model robustness. Your job is to decide whether a rewritten text still carries
+the same task label as the original text.
+
+The gold label for this item is: {y}
+
+{context}ORIGINAL text:
+{original}
+
+REWRITTEN text:
+{rewritten}
+
+Question: Does the REWRITTEN text still support exactly the same gold label
+"{y}" as the ORIGINAL, with no change in meaning, facts, or sentiment that
+would make the label incorrect?
+
+Answer with a single word on its own line: PASS if the label is preserved, or
+FAIL if it is not. Output only PASS or FAIL, with no explanation.

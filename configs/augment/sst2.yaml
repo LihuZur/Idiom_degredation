@@ -4,7 +4,20 @@
 dataset: sst2
 seed: 0
 
-augmenter: identity
+augmenter: gemini
+augmenter_model: gemini-2.5-pro-002
+
+decoding:
+  temperature: 0.7
+  max_output_tokens: 512
+
+judge:
+  temperature: 0.0
+  max_output_tokens: 16
+
+retry:
+  max_attempts: 3
+  backoff_seconds: 2.0
 
 prompts:
   paraphrase: paraphrase_v1.txt

@@ -119,12 +119,14 @@ def test_build_provenance_records_every_dataset_for_shared_model(tmp_path: Path)
     results_dir = tmp_path / "results"
     triple = {"original": [True], "paraphrase": [True], "idiomatic": [True]}
     paths = [
-        write_result_file(results_dir, dataset="sst2", model_id="shared", correct_by_variant=triple),
-        write_result_file(results_dir, dataset="mmlu", model_id="shared", correct_by_variant=triple),
+        write_result_file(
+            results_dir, dataset="sst2", model_id="shared", correct_by_variant=triple
+        ),
+        write_result_file(
+            results_dir, dataset="mmlu", model_id="shared", correct_by_variant=triple
+        ),
     ]
-    provenance = build_provenance(
-        [load_result(p) for p in paths], n_resamples=10, ci=0.95, seed=0
-    )
+    provenance = build_provenance([load_result(p) for p in paths], n_resamples=10, ci=0.95, seed=0)
     assert set(provenance["sources"].keys()) == {"sst2/shared", "mmlu/shared"}
 
 

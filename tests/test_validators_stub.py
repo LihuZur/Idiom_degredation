@@ -1,57 +1,29 @@
-"""Tests for augmentation/validators.py stubs + the pipeline's variant->validator mapping."""
+"""Tests for augmentation/validators.py stub + the pipeline's variant->validator mapping."""
 
 from augmentation.base import AugmentedRow
 from augmentation.pipeline import (
     _VARIANT_VALIDATORS,  # pyright: ignore[reportPrivateUsage]  # test-only introspection
 )
-from augmentation.validators import (
-    IdiomAbsenceValidator,
-    IdiomPresenceValidator,
-    LabelPreservationValidator,
-    SemanticSimilarityValidator,
-)
-
-
-def _row(variant: str = "paraphrase") -> AugmentedRow:
-    return AugmentedRow(
-        id="1",
-        variant=variant,  # type: ignore[arg-type]
-        x="some text",
-        y=0,
-        augmenter_model="identity",
-        prompt_hash="abc123",
-    )
+from augmentation.validators import SemanticSimilarityValidator
+from data.base import DatasetRow
 
 
 def test_semantic_similarity_stub_returns_expected_result() -> None:
-    result = SemanticSimilarityValidator().validate(_row())
+    aug = AugmentedRow(
+        id="1",
+        variant="paraphrase",
+        x="some text",
+        y=0,
+        augmenter_model="gemini/fake-model",
+        prompt_hash="abc123",
+    )
+    original = DatasetRow(id="1", x="some original text", y=0, meta={})
+
+    result = SemanticSimilarityValidator().validate(aug, original)
+
     assert result.name == "semantic_similarity"
     assert result.passed is True
     assert result.score == 1.0
-    assert result.details == {"stub": True}
-
-
-def test_label_preservation_stub_returns_expected_result() -> None:
-    result = LabelPreservationValidator().validate(_row())
-    assert result.name == "label_preservation"
-    assert result.passed is True
-    assert result.score is None
-    assert result.details == {"stub": True}
-
-
-def test_idiom_presence_stub_returns_expected_result() -> None:
-    result = IdiomPresenceValidator().validate(_row("idiomatic"))
-    assert result.name == "idiom_presence"
-    assert result.passed is True
-    assert result.score is None
-    assert result.details == {"stub": True, "note": "no real idiom detection yet"}
-
-
-def test_idiom_absence_stub_returns_expected_result() -> None:
-    result = IdiomAbsenceValidator().validate(_row("paraphrase"))
-    assert result.name == "idiom_absence"
-    assert result.passed is True
-    assert result.score is None
     assert result.details == {"stub": True}
 
 

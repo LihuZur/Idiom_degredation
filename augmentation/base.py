@@ -3,6 +3,7 @@
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol, runtime_checkable
 
+from augmentation.providers.base import LLMClient
 from data.base import DatasetRow
 
 Variant = Literal["original", "paraphrase", "idiomatic"]
@@ -38,9 +39,21 @@ class Augmenter(Protocol):
     variant: Variant
     augmenter_model: str
 
-    def __init__(self, *, variant: Variant, prompt_hash: str) -> None:
-        """Construct an augmenter assigned to `variant`, tagging rows with
-        `prompt_hash` (the resolved template's hash for this variant).
+    def __init__(
+        self,
+        *,
+        variant: Variant,
+        prompt_hash: str,
+        client: LLMClient,
+        prompt_template: str,
+        temperature: float,
+        max_output_tokens: int,
+    ) -> None:
+        """Construct an augmenter assigned to `variant`.
+
+        Tags emitted rows with `prompt_hash` (the resolved template's hash) and
+        rewrites `x` through the shared `client`, rendering `prompt_template`
+        with the configured decoding params.
         """
         ...
 
@@ -49,8 +62,12 @@ class Augmenter(Protocol):
 
 @runtime_checkable
 class Validator(Protocol):
-    """A single validator gate for augmented rows."""
+    """A single validator gate for augmented rows.
+
+    `validate` receives the augmented row and its `original` source row so
+    label-preservation judges can compare both texts against the gold label.
+    """
 
     name: str
 
-    def validate(self, ex: AugmentedRow) -> ValidationResult: ...
+    def validate(self, ex: AugmentedRow, original: DatasetRow) -> ValidationResult: ...

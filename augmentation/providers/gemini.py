@@ -1,0 +1,45 @@
+"""Google Gemini client wrapper (google-genai SDK); default provider (D5)."""
+
+import os
+
+from google import genai
+from google.genai import types
+
+from augmentation.providers.base import LLMError
+
+_API_KEY_ENV = "GEMINI_API_KEY"
+
+
+class GeminiClient:
+    """`LLMClient` backed by the Gemini Developer API (`google-genai`)."""
+
+    provider: str = "gemini"
+
+    def __init__(self, model: str) -> None:
+        api_key = os.environ.get(_API_KEY_ENV)
+        if not api_key:
+            raise LLMError(f"missing {_API_KEY_ENV} environment variable")
+        self.model = model
+        self._client = genai.Client(api_key=api_key)
+
+    def complete(
+        self, *, system: str, user: str, temperature: float, max_output_tokens: int
+    ) -> str:
+        """Generate text for `user`, applying `system` as a system instruction."""
+        try:
+            response = self._client.models.generate_content(
+                model=self.model,
+                contents=user,
+                config=types.GenerateContentConfig(
+                    system_instruction=system or None,
+                    temperature=temperature,
+                    max_output_tokens=max_output_tokens,
+                ),
+            )
+        except Exception as exc:  # SDK/transport error -> retryable
+            raise LLMError(f"gemini request failed: {exc}") from exc
+
+        text = response.text
+        if text is None or not text.strip():
+            raise LLMError("gemini returned empty output")
+        return text.strip()

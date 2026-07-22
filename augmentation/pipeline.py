@@ -3,6 +3,7 @@
 import csv
 import json
 import platform
+import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -10,7 +11,7 @@ from typing import Any
 
 import pandas as pd
 
-from augmentation.base import AugmentedRow, ValidationResult, Variant
+from augmentation.base import AugmentedRow, Augmenter, ValidationResult, Validator, Variant
 from augmentation.cache import ResponseCache
 from augmentation.config import AugmentConfig
 from augmentation.io import (
@@ -21,8 +22,11 @@ from augmentation.io import (
     write_sidecar,
     write_variant_csv,
 )
+from augmentation.llm_validators import build_judge
 from augmentation.prompts.loader import load_prompt
-from augmentation.registry import get_augmenter, get_validator
+from augmentation.providers.base import LLMClient, LLMError, build_client
+from augmentation.registry import get_augmenter
+from augmentation.validators import SemanticSimilarityValidator
 from cleaning.hashing import config_hash, prompt_hash
 from data.base import DatasetRow
 
@@ -30,6 +34,20 @@ _VARIANT_VALIDATORS: dict[Variant, list[str]] = {
     "paraphrase": ["semantic_similarity", "label_preservation", "idiom_absence"],
     "idiomatic": ["semantic_similarity", "label_preservation", "idiom_presence"],
 }
+
+
+class AugmentationError(RuntimeError):
+    """Raised when a row still fails validation after all retry attempts (D3)."""
+
+    def __init__(self, *, row_id: str, variant: Variant, failing: list[str], attempts: int) -> None:
+        self.row_id = row_id
+        self.variant = variant
+        self.failing = failing
+        self.attempts = attempts
+        super().__init__(
+            f"augmentation failed for id={row_id!r} variant={variant!r} after "
+            f"{attempts} attempt(s); failing: {failing}"
+        )
 
 
 def _parse_meta(meta_str: str | None) -> dict[str, Any]:
@@ -59,6 +77,8 @@ class AugmentPipeline:
 
     Resolves the augmenter/validators/prompts purely through `cfg` and the
     registries — no dataset- or augmenter-specific branching lives here.
+    Failing rows are retried up to `cfg.retry.max_attempts` times before the
+    run aborts with `AugmentationError` (D3).
     """
 
     def __init__(
@@ -85,38 +105,124 @@ class AugmentPipeline:
                 for row in reader
             ]
 
+    def _backoff(self, attempt: int) -> None:
+        """Sleep an exponentially increasing delay before retry `attempt + 1`."""
+        base = self._cfg.retry.backoff_seconds
+        if base > 0:
+            time.sleep(base * (2 ** (attempt - 1)))
+
+    def _build_validators(self, variant: Variant, client: LLMClient) -> list[Validator]:
+        """Construct the validator chain for `variant`, sharing `client` with judges (D6)."""
+        cfg = self._cfg
+        validators: list[Validator] = []
+        for name in _VARIANT_VALIDATORS[variant]:
+            if name == "semantic_similarity":
+                validators.append(SemanticSimilarityValidator())
+            else:
+                validators.append(
+                    build_judge(
+                        name,
+                        client=client,
+                        temperature=cfg.judge.temperature,
+                        max_output_tokens=cfg.judge.max_output_tokens,
+                    )
+                )
+        return validators
+
+    def _augment_with_retry(
+        self,
+        augmenter: Augmenter,
+        validators: list[Validator],
+        row: DatasetRow,
+        variant: Variant,
+    ) -> tuple[AugmentedRow, list[ValidationResult]]:
+        """Augment `row` and validate it, retrying on failure per `cfg.retry` (D3)."""
+        cfg = self._cfg
+        failing: list[str] = []
+        for attempt in range(1, cfg.retry.max_attempts + 1):
+            try:
+                aug = augmenter.augment(row)
+                results = [v.validate(aug, row) for v in validators]
+            except LLMError as exc:
+                failing = [f"llm_error: {exc}"]
+                if attempt < cfg.retry.max_attempts:
+                    self._backoff(attempt)
+                continue
+            failing = [r.name for r in results if not r.passed]
+            if not failing:
+                return aug, results
+            if attempt < cfg.retry.max_attempts:
+                self._backoff(attempt)
+        raise AugmentationError(
+            row_id=row.id, variant=variant, failing=failing, attempts=cfg.retry.max_attempts
+        )
+
     def _build_variant(
         self,
         variant: Variant,
         prompt_hash_val: str,
+        template: str,
         rows: list[DatasetRow],
         cache: ResponseCache,
+        client: LLMClient,
     ) -> _VariantBuild:
         """Augment every row for one variant (cache-aware) and run its validators."""
         cfg = self._cfg
-        augmenter = get_augmenter(cfg.augmenter)(variant=variant, prompt_hash=prompt_hash_val)
-        validators = [get_validator(name)() for name in _VARIANT_VALIDATORS[variant]]
+        augmenter = get_augmenter(cfg.augmenter)(
+            variant=variant,
+            prompt_hash=prompt_hash_val,
+            client=client,
+            prompt_template=template,
+            temperature=cfg.decoding.temperature,
+            max_output_tokens=cfg.decoding.max_output_tokens,
+        )
+        validators = self._build_validators(variant, client)
+        augmenter_model = f"{client.provider}/{client.model}"
 
         build = _VariantBuild()
         for row in rows:
-            cached = cache.get(prompt_hash_val, cfg.augmenter, row.id)
-            if cached is not None:
+            cached = cache.get(prompt_hash_val, augmenter_model, row.id)
+            if cached is not None and isinstance(cached.get("validators"), list):
                 build.hits += 1
                 aug = AugmentedRow(
                     id=row.id,
                     variant=variant,
                     x=str(cached["x"]),
                     y=row.y,
-                    augmenter_model=cfg.augmenter,
+                    augmenter_model=augmenter_model,
                     prompt_hash=prompt_hash_val,
                     meta=dict(row.meta),
                 )
+                results = [
+                    ValidationResult(
+                        name=str(v["name"]),
+                        passed=bool(v["passed"]),
+                        score=v["score"],
+                        details=v["details"],
+                    )
+                    for v in cached["validators"]
+                ]
             else:
                 build.misses += 1
-                aug = augmenter.augment(row)
-                cache.put(prompt_hash_val, cfg.augmenter, row.id, {"x": aug.x})
+                aug, results = self._augment_with_retry(augmenter, validators, row, variant)
+                cache.put(
+                    prompt_hash_val,
+                    augmenter_model,
+                    row.id,
+                    {
+                        "x": aug.x,
+                        "validators": [
+                            {
+                                "name": r.name,
+                                "passed": r.passed,
+                                "score": r.score,
+                                "details": r.details,
+                            }
+                            for r in results
+                        ],
+                    },
+                )
 
-            results = [validator.validate(aug) for validator in validators]
             for vr in results:
                 tally = build.passed_by_name if vr.passed else build.failed_by_name
                 tally[vr.name] = tally.get(vr.name, 0) + 1
@@ -131,6 +237,7 @@ class AugmentPipeline:
         prompt_hash_val: str,
         input_rows: int,
         build: _VariantBuild,
+        client: LLMClient,
     ) -> Path:
         """Write one variant's CSV + sidecar and record its counts/cache stats."""
         cfg = self._cfg
@@ -145,7 +252,7 @@ class AugmentPipeline:
             config_path=str(self._config_path.resolve()),
             config_hash=config_hash(resolved_config),
             resolved_config=resolved_config,
-            augmenter_model=cfg.augmenter,
+            augmenter_model=f"{client.provider}/{client.model}",
             prompt_file=prompt_file,
             prompt_hash=prompt_hash_val,
             tool_versions=AugmentToolVersions(
@@ -179,6 +286,7 @@ class AugmentPipeline:
         cfg = self._cfg
         rows = self._read_original(self._input_csv)
         cache = ResponseCache(Path(cfg.cache.dir), enabled=cfg.cache.enabled)
+        client = build_client(cfg.augmenter, cfg.augmenter_model)
 
         prompt_files: dict[Variant, str] = {
             "paraphrase": cfg.prompts.paraphrase,
@@ -188,8 +296,11 @@ class AugmentPipeline:
         out_paths: dict[Variant, Path] = {}
         for variant in ("paraphrase", "idiomatic"):
             prompt_file = prompt_files[variant]
-            ph = prompt_hash(load_prompt(prompt_file))
-            build = self._build_variant(variant, ph, rows, cache)
-            out_paths[variant] = self._write_variant(variant, prompt_file, ph, len(rows), build)
+            template = load_prompt(prompt_file)
+            ph = prompt_hash(template)
+            build = self._build_variant(variant, ph, template, rows, cache, client)
+            out_paths[variant] = self._write_variant(
+                variant, prompt_file, ph, len(rows), build, client
+            )
 
         return out_paths["paraphrase"], out_paths["idiomatic"]

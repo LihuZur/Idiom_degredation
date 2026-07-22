@@ -135,18 +135,28 @@ class Cleaner(Protocol):
 - Two augmentation strategies wrapping the same external LLM client:
   - `ParaphraseAugmenter` — reword `x` **without** idioms.
   - `IdiomaticAugmenter` — reword `x` **with** idioms.
-- Wrap a single external LLM provider (Gemini / Claude / GPT-4 class; exact
-  provider TBD). The augmenter runs a dedicated external-API code path
-  separate from the HF-based `models/` registry — it must be strictly
-  stronger than the models under evaluation, which HF-hosted open weights do
-  not satisfy for our purposes today.
+- Three registered provider clients behind a common `LLMClient` seam —
+  `gemini` (default), `anthropic` (Claude), `openai` (GPT) — selected purely
+  via config (`augmenter` + `augmenter_model`). API keys are read from env
+  only (`GEMINI_API_KEY` / `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`) and never
+  persisted. The augmenter runs a dedicated external-API code path separate
+  from the HF-based `models/` registry — it must be strictly stronger than
+  the models under evaluation, which HF-hosted open weights do not satisfy
+  for our purposes today.
 - Batching, retries, rate limiting, and an on-disk **response cache** keyed by
   `(prompt_hash, augmenter_model, input_id)`.
-- Validators applied to every augmented row:
-  - **Semantic similarity** filter (embedding cosine ≥ threshold);
-  - **Label preservation** check (LLM judge or task-specific heuristic);
-  - **Idiom presence / absence** check for the correct variant (idiom
-    dictionary and/or LLM judge).
+- Validators applied to every augmented row — `label_preservation`,
+  `idiom_presence`, and `idiom_absence` are real LLM judges that reuse the
+  augmenter's provider + model; `semantic_similarity` is a deferred
+  always-pass stub (embeddings are future work, §13-equivalent):
+  - **Semantic similarity** filter (embedding cosine ≥ threshold) — *stub,
+    always passes for now*;
+  - **Label preservation** check (LLM judge);
+  - **Idiom presence / absence** check for the correct variant (LLM judge).
+- **Failure policy:** a failing, empty, or refused row triggers up to N
+  retries (default 3, exponential backoff); if it still fails, the pipeline
+  **raises and aborts the whole dataset run** — no partial/bad rows are
+  written, preserving row alignment across variants.
 - Preserve `id`, `y`, `split`, and `meta` from the cleaned CSV so all three
   variants are row-for-row aligned.
 - Expose augmenters through a **registry** so new provider clients can be
@@ -204,9 +214,9 @@ dataset, `--all` to run every registered dataset (each requires its own
 - All three files share the row schema in §3 and are aligned by `id`.
 - Versioning is handled via an optional `_v{n}` suffix when a dataset is
   regenerated (e.g. `sst2_paraphrase_v2.csv`); the active version per
-  experiment is pinned in the experiment config. *(Future work; not
-  implemented in the current identity-augmenter phase — Stage 2 always
-  writes the unversioned `paraphrase.csv` / `idiomatic.csv`.)*
+  experiment is pinned in the experiment config. *(Future work; not yet
+  implemented — Stage 2 always writes the unversioned `paraphrase.csv` /
+  `idiomatic.csv`.)*
 
 ### 2.5 `models/` — model registry & runners
 
@@ -515,15 +525,16 @@ The authoritative statement of engineering standards lives in
 | GPU | `select_device()` helper | Runners never hard-code `"cuda"` |
 | Extensibility | Registries in `data/`, `models/`, `augmentation/` | New dataset / model = 1 file + decorator, no runner edits |
 | Visualisation | Plotly only | `analysis/` outputs interactive HTML (PNG via kaleido deferred, README §13) |
-| Sourcing | Hugging Face only in current phase | No `source` discriminator on registries; augmenter runs a separate external-API code path |
+| Sourcing | Hugging Face only for eval models; augmenter is hosted-API only | No `source` discriminator on registries; augmenter runs a separate external-API code path (`gemini`/`anthropic`/`openai`) |
 
 ## 8. Open Architectural Decisions
 
 Mirrors §12 of the README — recorded here because they shape module
 behavior, not just planning:
 
-1. **Paraphraser LLM provider** — determines the concrete client in
-   `augmentation/` and the cache key format.
+1. ~~**Paraphraser LLM provider**~~ **Resolved:** three provider clients
+   (`gemini` default, `anthropic`, `openai`) are registered behind the
+   `LLMClient` seam in `augmentation/`, selected via config.
 2. **Decoder revisions** — final pinned revisions for Gemma 4 and Qwen 3.5
    variants once availability is confirmed.
 

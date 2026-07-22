@@ -8,7 +8,10 @@ from pathlib import Path
 
 import click
 
-import augmentation.identity  # pyright: ignore[reportUnusedImport]  — triggers @register_augmenter
+import augmentation.anthropic_augmenter  # pyright: ignore[reportUnusedImport]  — triggers @register_augmenter
+import augmentation.gemini_augmenter  # pyright: ignore[reportUnusedImport]  — triggers @register_augmenter
+import augmentation.llm_validators  # pyright: ignore[reportUnusedImport]  — triggers @register_validator
+import augmentation.openai_augmenter  # pyright: ignore[reportUnusedImport]  — triggers @register_augmenter
 import augmentation.validators  # noqa: F401  # pyright: ignore[reportUnusedImport]  — triggers @register_validator
 import data  # noqa: F401  # pyright: ignore[reportUnusedImport]  — triggers @register_dataset (needed by --all)
 from augmentation.config import load_config
