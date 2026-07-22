@@ -1,0 +1,13 @@
+# Configuration for DeepSeek-R1-Distill-Qwen-7B model.
+# This is a reasoning distill model that emits <think>...</think> chain-of-thought
+# before its final answer, so max_new_tokens is raised well above the 32 used for
+# the direct instruct models to leave room for the reasoning trace.
+model: deepseek-r1-distill-qwen-7b
+seed: 0
+precision: bf16
+decoding:
+  temperature: 0.0
+  max_new_tokens: 512
+  do_sample: false
+batch:
+  size: 8
