@@ -41,13 +41,28 @@ def _augment_one(
     paraphrase_csv, idiomatic_csv = pipeline.run()
 
     out_paths = {"paraphrase": paraphrase_csv, "idiomatic": idiomatic_csv}
+    # Report only variants that were actually attempted this run (a variant that
+    # stops early stops the run before later variants start).
     for variant, out_path in out_paths.items():
-        counts = pipeline.last_counts.get(variant, {})
+        if variant not in pipeline.last_counts:
+            continue
+        counts = pipeline.last_counts[variant]
         cache_stats = pipeline.last_cache_stats.get(variant, {})
         click.echo(f"[augment] [{variant}] counts={counts}")
         click.echo(f"[augment] [{variant}] cache={cache_stats}")
-        click.echo(f"[augment] [{variant}] wrote {out_path}")
-        click.echo(f"[augment] [{variant}] wrote {out_path.parent / f'{variant}.meta.json'}")
+        if variant in pipeline.incomplete_variants:
+            click.echo(
+                f"[augment] [{variant}] INCOMPLETE — {counts.get('written', 0)} row(s) "
+                f"saved to {out_path}; re-run the same command to resume."
+            )
+        else:
+            click.echo(f"[augment] [{variant}] wrote {out_path}")
+            click.echo(f"[augment] [{variant}] wrote {out_path.parent / f'{variant}.meta.json'}")
+
+    if pipeline.incomplete_variants:
+        click.echo(
+            "[augment] run incomplete — re-run the same command to resume from where it stopped."
+        )
 
 
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})

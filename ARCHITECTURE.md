@@ -155,8 +155,16 @@ class Cleaner(Protocol):
   - **Idiom presence / absence** check for the correct variant (LLM judge).
 - **Failure policy:** a failing, empty, or refused row triggers up to N
   retries (default 3, exponential backoff); if it still fails, the pipeline
-  **raises and aborts the whole dataset run** — no partial/bad rows are
-  written, preserving row alignment across variants.
+  **stops that variant gracefully** — the rows already written are kept and the
+  run stops before starting later variants. No partial/bad row is ever written,
+  so row alignment across variants is preserved.
+- **Streaming + resumable output:** accepted rows are appended to each variant
+  CSV and flushed as they are produced (bounded memory), and a variant's
+  sidecar is written only once it completes. An interrupted run (crash, kill,
+  or a stopped variant) therefore leaves a durable partial CSV; **re-running the
+  same command resumes** — rows already present are skipped and only the
+  remaining rows are augmented. A CSV produced by a different `augmenter_model`
+  or `prompt_hash` is treated as stale and rewritten from scratch.
 - Preserve `id`, `y`, `split`, and `meta` from the cleaned CSV so all three
   variants are row-for-row aligned.
 - Expose augmenters through a **registry** so new provider clients can be

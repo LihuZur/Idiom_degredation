@@ -148,7 +148,7 @@ def test_pipeline_counts_are_correct(tmp_path: Path, monkeypatch: pytest.MonkeyP
     assert pipeline.last_cache_stats["paraphrase"] == {"hits": 0, "misses": 3}
 
 
-def test_pipeline_second_run_hits_cache_with_zero_client_calls(
+def test_pipeline_second_run_resumes_from_csv_with_zero_client_calls(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     original_csv = _write_original(tmp_path)
@@ -162,8 +162,9 @@ def test_pipeline_second_run_hits_cache_with_zero_client_calls(
     _patch_build_client(monkeypatch, warm_client)
     AugmentPipeline(cfg, original_csv, out_dir, config_path).run()
 
-    # Fresh client (zeroed counters), same cache dir/model -> should be a pure
-    # cache hit that never touches the client.
+    # Fresh client (zeroed counters), same output dir/model: every row is
+    # already in the variant CSV, so the second run resumes by skipping them all
+    # and never touches the client (or even the cache).
     fresh_client = FakeClient(augment_result=_REWRITTEN, judge_result="PASS")
     _patch_build_client(monkeypatch, fresh_client)
     second = AugmentPipeline(cfg, original_csv, out_dir, config_path)
@@ -171,8 +172,37 @@ def test_pipeline_second_run_hits_cache_with_zero_client_calls(
 
     assert fresh_client.augment_calls == 0
     assert fresh_client.judge_calls == 0
+    assert second.last_cache_stats["paraphrase"] == {"hits": 0, "misses": 0}
+    assert second.last_cache_stats["idiomatic"] == {"hits": 0, "misses": 0}
+    assert second.last_counts["paraphrase"]["skipped"] == 3
+    assert second.last_counts["idiomatic"]["skipped"] == 3
+    assert second.last_counts["paraphrase"]["written"] == 3
+
+
+def test_pipeline_resume_after_deleted_csv_falls_back_to_cache(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    original_csv = _write_original(tmp_path)
+    cfg = make_cfg(cache_dir=tmp_path / "cache")
+    out_dir = tmp_path / "datasets_out"
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text("dummy: true")
+
+    warm_client = FakeClient(augment_result=_REWRITTEN, judge_result="PASS")
+    _patch_build_client(monkeypatch, warm_client)
+    paraphrase_csv, idiomatic_csv = AugmentPipeline(cfg, original_csv, out_dir, config_path).run()
+
+    # Output CSVs gone but the response cache is warm: rebuild with zero client
+    # calls via the cache (the cache is the secondary resume substrate).
+    paraphrase_csv.unlink()
+    idiomatic_csv.unlink()
+    fresh_client = FakeClient(augment_result=_REWRITTEN, judge_result="PASS")
+    _patch_build_client(monkeypatch, fresh_client)
+    second = AugmentPipeline(cfg, original_csv, out_dir, config_path)
+    second.run()
+
+    assert fresh_client.augment_calls == 0
     assert second.last_cache_stats["paraphrase"] == {"hits": 3, "misses": 0}
-    assert second.last_cache_stats["idiomatic"] == {"hits": 3, "misses": 0}
 
 
 def test_pipeline_changing_model_misses_warm_cache(
