@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
+from tqdm.auto import tqdm
 
 from augmentation.base import AugmentedRow, Augmenter, ValidationResult, Validator, Variant
 from augmentation.cache import ResponseCache
@@ -180,7 +181,8 @@ class AugmentPipeline:
         augmenter_model = f"{client.provider}/{client.model}"
 
         build = _VariantBuild()
-        for row in rows:
+        progress = tqdm(rows, desc=f"[augment {variant}]", unit="row")
+        for row in progress:
             cached = cache.get(prompt_hash_val, augmenter_model, row.id)
             if cached is not None and isinstance(cached.get("validators"), list):
                 build.hits += 1
@@ -228,6 +230,11 @@ class AugmentPipeline:
                 tally[vr.name] = tally.get(vr.name, 0) + 1
 
             build.output_rows.append((aug, results))
+            progress.set_postfix(  # pyright: ignore[reportUnknownMemberType]
+                hits=build.hits,
+                misses=build.misses,
+                failed=sum(build.failed_by_name.values()),
+            )
         return build
 
     def _write_variant(

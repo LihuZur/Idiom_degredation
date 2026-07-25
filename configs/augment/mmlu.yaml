@@ -5,15 +5,15 @@ dataset: mmlu
 seed: 0
 
 augmenter: gemini
-augmenter_model: gemini-2.5-pro-002
+augmenter_model: gemini-3.1-pro-preview
 
 decoding:
   temperature: 0.7
-  max_output_tokens: 512
+  max_output_tokens: 1536
 
 judge:
   temperature: 0.0
-  max_output_tokens: 16
+  max_output_tokens: 512
 
 retry:
   max_attempts: 3

@@ -12,28 +12,30 @@ augmenter: gemini
 
 # Fully pinned model id for reproducibility — never a floating/"-latest"
 # alias. Recommended pinned id per provider:
-#   gemini:    gemini-2.5-pro-002    (env: GEMINI_API_KEY)
+#   gemini:    gemini-3.1-pro-preview (env: GEMINI_API_KEY)
 #   anthropic: claude-opus-4-8       (env: ANTHROPIC_API_KEY)
 #   openai:    gpt-4.1               (env: OPENAI_API_KEY)
 # API keys are read from the environment ONLY — never put a key in this
 # YAML.
-augmenter_model: gemini-2.5-pro-002
+augmenter_model: gemini-3.1-pro-preview
 
 # Augmenter decoding params (D7). temperature ~0.7 gives varied paraphrases;
 # max_output_tokens bounds a single rewritten row. The cache key includes
 # augmenter_model so decoding params + model together determine
-# reproducibility.
+# reproducibility. NOTE: thinking-capable models (e.g. gemini-3.x) spend part
+# of this budget on invisible reasoning tokens before any visible text, so
+# this must stay generous or `complete()` can return empty output.
 decoding:
   temperature: 0.7
-  max_output_tokens: 512
+  max_output_tokens: 1536
 
 # LLM-judge decoding params (M2). The judge REUSES the augmenter's
 # provider + model (no separate judge model/key). temperature: 0.0 for
-# deterministic verdicts; max_output_tokens is small since a verdict is a
-# short label, not free text.
+# deterministic verdicts. max_output_tokens must still leave room for the
+# model's thinking tokens ahead of the short PASS/FAIL verdict text.
 judge:
   temperature: 0.0
-  max_output_tokens: 16
+  max_output_tokens: 512
 
 # Retry-then-abort policy for failing/empty rows (D3 / M1). On exhausting
 # max_attempts (exponential backoff starting at backoff_seconds), the whole

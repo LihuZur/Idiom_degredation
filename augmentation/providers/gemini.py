@@ -34,6 +34,11 @@ class GeminiClient:
                     system_instruction=system or None,
                     temperature=temperature,
                     max_output_tokens=max_output_tokens,
+                    # This model family always thinks (thinking_budget=0 is rejected);
+                    # LOW keeps the reasoning trace short so max_output_tokens isn't
+                    # entirely consumed by invisible thought tokens before any
+                    # visible answer text is emitted.
+                    thinking_config=types.ThinkingConfig(thinking_level=types.ThinkingLevel.LOW),
                 ),
             )
         except Exception as exc:  # SDK/transport error -> retryable
