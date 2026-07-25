@@ -5,7 +5,7 @@ dataset: sst2
 seed: 0
 
 augmenter: gemini
-augmenter_model: gemini-3.1-pro-preview
+augmenter_model: gemini-3.6-flash
 
 decoding:
   temperature: 0.7
