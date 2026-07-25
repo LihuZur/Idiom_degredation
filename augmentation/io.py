@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import pandas as pd
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from augmentation.base import AugmentedRow, ValidationResult
 
@@ -30,6 +30,21 @@ class AugmentToolVersions(BaseModel, extra="forbid"):
     pandas: str
 
 
+class SkippedRow(BaseModel, extra="forbid"):
+    """One row excluded from a variant's final CSV, recorded in the sidecar.
+
+    `reason` is either `"validation_failed"` (the row still failed `failing`
+    after `attempts` augment tries — e.g. an original that already contains an
+    idiom can't yield an idiom-free paraphrase) or `"unaligned"` (the row was
+    dropped so all variants stay row-for-row aligned, because it was excluded
+    from a sibling variant)."""
+
+    id: str
+    reason: Literal["validation_failed", "unaligned"]
+    failing: list[str] = Field(default_factory=list)
+    attempts: int = 0
+
+
 class AugmentRowCounts(BaseModel, extra="forbid"):
     """Row counts through the Stage 2 augmentation step."""
 
@@ -41,6 +56,9 @@ class AugmentRowCounts(BaseModel, extra="forbid"):
     skipped: int = 0
     """Rows already present in the output CSV from an earlier run and resumed
     (not re-augmented) this run. 0 for a fresh full run."""
+    dropped: int = 0
+    """Rows excluded from the final CSV (validation failures + rows dropped to
+    keep variants aligned); one `SkippedRow` per dropped id in `skipped_rows`."""
 
 
 class CacheStats(BaseModel, extra="forbid"):
@@ -65,6 +83,9 @@ class AugmentSidecar(BaseModel, extra="forbid"):
     tool_versions: AugmentToolVersions
     row_counts: AugmentRowCounts
     cache_stats: CacheStats
+    skipped_rows: list[SkippedRow] = Field(default_factory=list)
+    """Every row excluded from this variant's CSV, with its reason. Mirrors
+    `row_counts.dropped`."""
     timestamp_utc: str
 
 
@@ -212,3 +233,64 @@ def write_sidecar(path: Path, sidecar: AugmentSidecar) -> None:
     """Write the Stage 2 sidecar JSON (`{variant}.meta.json`)."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(sidecar.model_dump(), indent=2, sort_keys=True), encoding="utf-8")
+
+
+def skips_manifest_path(variant_csv: Path) -> Path:
+    """Path of the durable skip manifest beside a variant CSV (`{variant}.skipped.json`)."""
+    return variant_csv.with_name(f"{variant_csv.stem}.skipped.json")
+
+
+def write_skips_manifest(path: Path, rows: list[SkippedRow]) -> None:
+    """Persist the skipped-row records so a resumed run does not retry them."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = [r.model_dump() for r in rows]
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+
+
+def read_skips_manifest(path: Path) -> list[SkippedRow]:
+    """Load skipped-row records (empty list if absent/unreadable/invalid)."""
+    try:
+        parsed: Any = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return []
+    if not isinstance(parsed, list):
+        return []
+    rows: list[SkippedRow] = []
+    for item in parsed:  # pyright: ignore[reportUnknownVariableType]
+        try:
+            rows.append(SkippedRow.model_validate(item))
+        except ValueError:
+            continue
+    return rows
+
+
+def _read_ids(path: Path) -> list[str]:
+    """Read the `id` column of a variant CSV in file order (empty if absent)."""
+    if not path.exists() or path.stat().st_size == 0:
+        return []
+    with path.open(encoding="utf-8", newline="") as f:
+        return [row["id"] for row in csv.DictReader(f) if row.get("id")]
+
+
+def reconcile_variant_csvs(paths: list[Path]) -> tuple[set[str], dict[Path, set[str]]]:
+    """Filter every variant CSV down to the ids common to all of them.
+
+    Returns `(surviving_ids, removed_by_path)`. Rows are only dropped, never
+    reordered, so the variants stay row-for-row aligned by `id` after a run in
+    which different rows were skipped in different variants. A CSV already equal
+    to the common set is left untouched."""
+    existing = [p for p in paths if p.exists() and p.stat().st_size > 0]
+    if not existing:
+        return set(), {}
+    id_lists = {p: _read_ids(p) for p in existing}
+    surviving: set[str] = set.intersection(*(set(ids) for ids in id_lists.values()))
+    removed_by_path: dict[Path, set[str]] = {}
+    for p, ids in id_lists.items():
+        removed = set(ids) - surviving
+        removed_by_path[p] = removed
+        if not removed:
+            continue
+        df = pd.read_csv(p, keep_default_na=False, dtype=str)
+        df = df[df["id"].isin(list(surviving))]
+        df.to_csv(p, index=False, quoting=csv.QUOTE_MINIMAL)
+    return surviving, removed_by_path

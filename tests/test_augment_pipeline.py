@@ -174,8 +174,8 @@ def test_pipeline_second_run_resumes_from_csv_with_zero_client_calls(
     assert fresh_client.judge_calls == 0
     assert second.last_cache_stats["paraphrase"] == {"hits": 0, "misses": 0}
     assert second.last_cache_stats["idiomatic"] == {"hits": 0, "misses": 0}
-    assert second.last_counts["paraphrase"]["skipped"] == 3
-    assert second.last_counts["idiomatic"]["skipped"] == 3
+    assert second.last_counts["paraphrase"]["resumed"] == 3
+    assert second.last_counts["idiomatic"]["resumed"] == 3
     assert second.last_counts["paraphrase"]["written"] == 3
 
 

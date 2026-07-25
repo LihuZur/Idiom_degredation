@@ -41,8 +41,6 @@ def _augment_one(
     paraphrase_csv, idiomatic_csv = pipeline.run()
 
     out_paths = {"paraphrase": paraphrase_csv, "idiomatic": idiomatic_csv}
-    # Report only variants that were actually attempted this run (a variant that
-    # stops early stops the run before later variants start).
     for variant, out_path in out_paths.items():
         if variant not in pipeline.last_counts:
             continue
@@ -50,18 +48,25 @@ def _augment_one(
         cache_stats = pipeline.last_cache_stats.get(variant, {})
         click.echo(f"[augment] [{variant}] counts={counts}")
         click.echo(f"[augment] [{variant}] cache={cache_stats}")
-        if variant in pipeline.incomplete_variants:
+        dropped = counts.get("dropped", 0)
+        if dropped:
             click.echo(
-                f"[augment] [{variant}] INCOMPLETE — {counts.get('written', 0)} row(s) "
-                f"saved to {out_path}; re-run the same command to resume."
+                f"[augment] [{variant}] dropped {dropped} row(s) that failed validation "
+                f"or were unaligned — see {out_path.parent / f'{variant}.meta.json'} "
+                "(skipped_rows)."
+            )
+        if pipeline.paused:
+            click.echo(
+                f"[augment] [{variant}] PAUSED — {counts.get('written', 0)} row(s) in {out_path}"
             )
         else:
             click.echo(f"[augment] [{variant}] wrote {out_path}")
             click.echo(f"[augment] [{variant}] wrote {out_path.parent / f'{variant}.meta.json'}")
 
-    if pipeline.incomplete_variants:
+    if pipeline.paused:
         click.echo(
-            "[augment] run incomplete — re-run the same command to resume from where it stopped."
+            "[augment] run PAUSED on a transient/API error (e.g. rate-limit or quota). "
+            "Partial output is saved — re-run the same command to resume once it clears."
         )
 
 
