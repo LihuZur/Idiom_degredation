@@ -3,14 +3,17 @@
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
-from augmentation.config import AugmentConfig, CacheCfg, PromptsCfg
 from augmentation.pipeline import AugmentPipeline
 from cleaning.io import write_original_csv
 from data.base import DatasetRow
+from tests._augment_helpers import FakeClient, make_cfg
 
 
-def test_original_paraphrase_idiomatic_share_same_ordered_id_list(tmp_path: Path) -> None:
+def test_original_paraphrase_idiomatic_share_same_ordered_id_list(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     rows = [
         DatasetRow(id="a1", x="first example", y=0, meta={}),
         DatasetRow(id="a2", x="second example", y=1, meta={}),
@@ -19,13 +22,14 @@ def test_original_paraphrase_idiomatic_share_same_ordered_id_list(tmp_path: Path
     original_csv = tmp_path / "original.csv"
     write_original_csv(original_csv, rows)
 
-    cfg = AugmentConfig(
-        dataset="sst2",
-        seed=0,
-        augmenter="identity",
-        prompts=PromptsCfg(paraphrase="paraphrase_v1.txt", idiomatic="idiomatic_v1.txt"),
-        cache=CacheCfg(enabled=True, dir=str(tmp_path / "cache")),
-    )
+    fake = FakeClient(augment_result="a rewritten sentence", judge_result="PASS")
+
+    def fake_build_client(provider: str, model: str) -> FakeClient:
+        return fake
+
+    monkeypatch.setattr("augmentation.pipeline.build_client", fake_build_client)
+
+    cfg = make_cfg(cache_dir=tmp_path / "cache")
     out_dir = tmp_path / "datasets_out"
     paraphrase_csv, idiomatic_csv = AugmentPipeline(
         cfg, original_csv, out_dir, tmp_path / "config.yaml"

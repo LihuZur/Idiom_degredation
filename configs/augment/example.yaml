@@ -4,9 +4,46 @@
 dataset: sst2
 seed: 0
 
-# Registered augmenter id (see augmentation/registry.py). The augmenter is
-# an external hosted LLM, not an HF model (README §9.7).
-augmenter: null   # TBD; see README §12 open decisions
+# Registered augmenter id (see augmentation/registry.py): one of
+# gemini | anthropic | openai. Gemini is the default. The augmenter is a
+# hosted external LLM, NOT an HF model (README §9.7) — it must be strictly
+# stronger than the eval decoders (STAGE2_PLAN).
+augmenter: gemini
+
+# Fully pinned model id for reproducibility — never a floating/"-latest"
+# alias. Recommended pinned id per provider:
+#   gemini:    gemini-3.1-pro-preview (env: GEMINI_API_KEY)
+#   anthropic: claude-opus-4-8       (env: ANTHROPIC_API_KEY)
+#   openai:    gpt-4.1               (env: OPENAI_API_KEY)
+# API keys are read from the environment ONLY — never put a key in this
+# YAML.
+augmenter_model: gemini-3.1-pro-preview
+
+# Augmenter decoding params (D7). temperature ~0.7 gives varied paraphrases;
+# max_output_tokens bounds a single rewritten row. The cache key includes
+# augmenter_model so decoding params + model together determine
+# reproducibility. NOTE: thinking-capable models (e.g. gemini-3.x) spend part
+# of this budget on invisible reasoning tokens before any visible text, so
+# this must stay generous or `complete()` can return empty output.
+decoding:
+  temperature: 0.7
+  max_output_tokens: 1536
+
+# LLM-judge decoding params (M2). The judge REUSES the augmenter's
+# provider + model (no separate judge model/key). temperature: 0.0 for
+# deterministic verdicts. max_output_tokens must still leave room for the
+# model's thinking tokens ahead of the short PASS/FAIL verdict text.
+judge:
+  temperature: 0.0
+  max_output_tokens: 512
+
+# Retry-then-abort policy for failing/empty rows (D3 / M1). On exhausting
+# max_attempts (exponential backoff starting at backoff_seconds), the whole
+# dataset run ABORTS — no partial/bad rows are written, preserving row
+# alignment across paraphrase/idiomatic outputs.
+retry:
+  max_attempts: 3
+  backoff_seconds: 2.0
 
 # Frozen prompt template filenames under augmentation/prompts/.
 # Hashes of the resolved templates are logged on every emitted row
@@ -17,14 +54,19 @@ prompts:
 
 # Validator thresholds (ARCHITECTURE §2.3).
 validators:
+  # DEFERRED this phase: always-pass stub (no embedding call made yet).
   semantic_similarity:
     embedding_model: null   # TBD
     min_cosine: 0.80
+  # Real LLM judge: does the rewrite preserve the original label?
   label_preservation:
-    method: llm_judge       # or a task-specific heuristic
-  idiom_presence:            # applied to `idiomatic` variant
     method: llm_judge
-  idiom_absence:             # applied to `paraphrase` variant (control)
+  # Real LLM judge, applied to the `idiomatic` variant: is an idiom present?
+  idiom_presence:
+    method: llm_judge
+  # Real LLM judge, applied to the `paraphrase` variant (control): is the
+  # idiom absent?
+  idiom_absence:
     method: llm_judge
 
 # Response cache — keyed by (prompt_hash, augmenter_model, input_id).

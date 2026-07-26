@@ -25,6 +25,9 @@ dependencies = [
     "tqdm>=4.66",
     "click>=8.1",
     "tabulate>=0.9",
+    "anthropic>=0.40",
+    "google-genai>=1.0",
+    "openai>=1.50",
 ]
 
 # Console entrypoints so each Stage CLI is runnable as `uv run <name>` instead

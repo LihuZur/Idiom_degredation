@@ -8,7 +8,10 @@ from pathlib import Path
 
 import click
 
-import augmentation.identity  # pyright: ignore[reportUnusedImport]  — triggers @register_augmenter
+import augmentation.anthropic_augmenter  # pyright: ignore[reportUnusedImport]  — triggers @register_augmenter
+import augmentation.gemini_augmenter  # pyright: ignore[reportUnusedImport]  — triggers @register_augmenter
+import augmentation.llm_validators  # pyright: ignore[reportUnusedImport]  — triggers @register_validator
+import augmentation.openai_augmenter  # pyright: ignore[reportUnusedImport]  — triggers @register_augmenter
 import augmentation.validators  # noqa: F401  # pyright: ignore[reportUnusedImport]  — triggers @register_validator
 import data  # noqa: F401  # pyright: ignore[reportUnusedImport]  — triggers @register_dataset (needed by --all)
 from augmentation.config import load_config
@@ -39,12 +42,32 @@ def _augment_one(
 
     out_paths = {"paraphrase": paraphrase_csv, "idiomatic": idiomatic_csv}
     for variant, out_path in out_paths.items():
-        counts = pipeline.last_counts.get(variant, {})
+        if variant not in pipeline.last_counts:
+            continue
+        counts = pipeline.last_counts[variant]
         cache_stats = pipeline.last_cache_stats.get(variant, {})
         click.echo(f"[augment] [{variant}] counts={counts}")
         click.echo(f"[augment] [{variant}] cache={cache_stats}")
-        click.echo(f"[augment] [{variant}] wrote {out_path}")
-        click.echo(f"[augment] [{variant}] wrote {out_path.parent / f'{variant}.meta.json'}")
+        dropped = counts.get("dropped", 0)
+        if dropped:
+            click.echo(
+                f"[augment] [{variant}] dropped {dropped} row(s) that failed validation "
+                f"or were unaligned — see {out_path.parent / f'{variant}.meta.json'} "
+                "(skipped_rows)."
+            )
+        if pipeline.paused:
+            click.echo(
+                f"[augment] [{variant}] PAUSED — {counts.get('written', 0)} row(s) in {out_path}"
+            )
+        else:
+            click.echo(f"[augment] [{variant}] wrote {out_path}")
+            click.echo(f"[augment] [{variant}] wrote {out_path.parent / f'{variant}.meta.json'}")
+
+    if pipeline.paused:
+        click.echo(
+            "[augment] run PAUSED on a transient/API error (e.g. rate-limit or quota). "
+            "Partial output is saved — re-run the same command to resume once it clears."
+        )
 
 
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})

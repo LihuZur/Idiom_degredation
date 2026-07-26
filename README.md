@@ -280,7 +280,8 @@ project is built around three **registries** (see [ARCHITECTURE.md](ARCHITECTURE
 
 - `data/registry.py`         — `@register_dataset("sst2")`
 - `models/registry.py`       — `@register_model("qwen3.5-7b-instruct", kind="decoder")`
-- `augmentation/registry.py` — `@register_augmenter("claude-3.7-sonnet")`
+- `augmentation/registry.py` — `@register_augmenter("gemini")` (also
+  `"anthropic"`, `"openai"`)
 
 A new dataset or model is added by:
 
@@ -309,10 +310,11 @@ Removal is symmetric: delete the file and any configs that reference it.
   called out** — both in its registry entry (`source="non-hf"` with a
   reason string) and in this README under "Known non-HF components".
 - **Known non-HF components (current):**
-  - The **augmenter LLM** used in Stage 2 is expected to be a hosted API
-    (Claude / Gemini / GPT-4 class), not an HF model. This is intentional —
-    the augmenter must be strictly stronger than the models under
-    evaluation. The exact provider is pending decision (§12).
+  - The **augmenter LLM** used in Stage 2 is a hosted API, not an HF model.
+    Three providers are implemented and selectable via config
+    (`augmenter` + `augmenter_model`): `gemini` (default), `anthropic`
+    (Claude), and `openai` (GPT). This is intentional — the augmenter must
+    be strictly stronger than the models under evaluation.
 - Any future addition to this list requires a note here explaining why HF
   was insufficient.
 
@@ -403,7 +405,9 @@ uv run idiom-plot-summary \
 The following items are intentionally **not** decided in this document. They
 will be proposed and confirmed separately before implementation:
 
-1. Choice of the **paraphraser LLM** provider / version.
+1. ~~Choice of the **paraphraser LLM** provider / version.~~ **Resolved:**
+   all three (`gemini`, `anthropic`, `openai`) are registered, with `gemini`
+   as the default; provider + model are chosen purely via config.
 2. Exact model revisions / checkpoints for each decoder (especially Gemma 4
    and Qwen 3.5 variants, subject to availability).
 3. Pinned **Python version** (≥ 3.11 assumed; exact minor to be set in

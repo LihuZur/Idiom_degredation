@@ -10,8 +10,20 @@ from collections.abc import Iterable
 
 import pytest
 
+# Registering the three hosted-LLM augmenters here (rather than only in
+# tests/test_providers_register.py) is what makes tests/test_smoke.py's
+# exact-registry assertion hold even when this file's tests run standalone
+# (module imports execute once, at collection time, and are cached thereafter).
+from augmentation.anthropic_augmenter import AnthropicAugmenter
 from augmentation.base import AugmentedRow, ValidationResult, Variant
-from augmentation.identity import IdentityAugmenter
+from augmentation.gemini_augmenter import GeminiAugmenter
+from augmentation.llm_validators import (
+    IdiomAbsenceValidator,
+    IdiomPresenceValidator,
+    LabelPreservationValidator,
+)
+from augmentation.openai_augmenter import OpenAIAugmenter
+from augmentation.providers.base import LLMClient
 from augmentation.registry import (
     AUGMENTERS,
     VALIDATORS,
@@ -22,12 +34,7 @@ from augmentation.registry import (
     register_augmenter,
     register_validator,
 )
-from augmentation.validators import (
-    IdiomAbsenceValidator,
-    IdiomPresenceValidator,
-    LabelPreservationValidator,
-    SemanticSimilarityValidator,
-)
+from augmentation.validators import SemanticSimilarityValidator
 from data.base import DatasetRow
 
 _counter = itertools.count()
@@ -53,9 +60,12 @@ def _fake_augmenter_name() -> str:
     return f"fake_augmenter_{next(_counter)}"
 
 
-def test_real_validators_and_identity_present() -> None:
-    assert "identity" in list_augmenters()
-    assert get_augmenter("identity") is IdentityAugmenter
+def test_registered_augmenters_and_validators() -> None:
+    assert {"anthropic", "gemini", "openai"} <= set(list_augmenters())
+    assert "identity" not in list_augmenters()
+    assert get_augmenter("anthropic") is AnthropicAugmenter
+    assert get_augmenter("gemini") is GeminiAugmenter
+    assert get_augmenter("openai") is OpenAIAugmenter
     assert set(list_validators()) >= {
         "semantic_similarity",
         "label_preservation",
@@ -74,7 +84,7 @@ def test_register_and_get_validator() -> None:
     class _FakeValidator:
         name: str = validator_name
 
-        def validate(self, ex: AugmentedRow) -> ValidationResult:
+        def validate(self, ex: AugmentedRow, original: DatasetRow) -> ValidationResult:
             return ValidationResult(name=self.name, passed=True)
 
     register_validator(validator_name)(_FakeValidator)
@@ -89,7 +99,16 @@ def test_register_and_get_augmenter() -> None:
         variant: Variant
         augmenter_model: str = name
 
-        def __init__(self, *, variant: Variant, prompt_hash: str) -> None:
+        def __init__(
+            self,
+            *,
+            variant: Variant,
+            prompt_hash: str,
+            client: LLMClient,
+            prompt_template: str,
+            temperature: float,
+            max_output_tokens: int,
+        ) -> None:
             self.variant = variant
             self._prompt_hash = prompt_hash
 
@@ -115,7 +134,7 @@ def test_duplicate_validator_register_raises() -> None:
     class _FakeValidator:
         name: str = validator_name
 
-        def validate(self, ex: AugmentedRow) -> ValidationResult:
+        def validate(self, ex: AugmentedRow, original: DatasetRow) -> ValidationResult:
             return ValidationResult(name=self.name, passed=True)
 
     register_validator(validator_name)(_FakeValidator)
@@ -130,7 +149,16 @@ def test_duplicate_augmenter_register_raises() -> None:
         variant: Variant
         augmenter_model: str = name
 
-        def __init__(self, *, variant: Variant, prompt_hash: str) -> None:
+        def __init__(
+            self,
+            *,
+            variant: Variant,
+            prompt_hash: str,
+            client: LLMClient,
+            prompt_template: str,
+            temperature: float,
+            max_output_tokens: int,
+        ) -> None:
             self.variant = variant
 
         def augment(self, ex: DatasetRow) -> AugmentedRow:
