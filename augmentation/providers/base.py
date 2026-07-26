@@ -14,7 +14,20 @@ _PROVIDERS = ("anthropic", "gemini", "openai")
 class LLMError(RuntimeError):
     """Raised when a provider returns empty/refused output or transport fails.
 
-    The Stage 2 pipeline catches this to drive its retry-then-abort loop (D3).
+    The Stage 2 pipeline catches this to drive its retry loop. A bare `LLMError`
+    is treated as *transient* (transport failure, 429 rate-limit, 5xx) and
+    pauses the run for resume; `EmptyResponseError` is treated as row-specific
+    (see below).
+    """
+
+
+class EmptyResponseError(LLMError):
+    """Raised when the provider returns no text for a specific input.
+
+    Unlike a transport failure this is a property of the row (a safety filter,
+    or reasoning that consumed the whole output budget), so retrying the *same*
+    row repeatedly never helps. The pipeline therefore skips the row (recorded
+    in the sidecar) rather than pausing the whole run on it.
     """
 
 

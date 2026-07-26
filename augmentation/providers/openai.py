@@ -5,7 +5,7 @@ import os
 from openai import OpenAI
 from openai.types.chat import ChatCompletionMessageParam
 
-from augmentation.providers.base import LLMError
+from augmentation.providers.base import EmptyResponseError, LLMError
 
 _API_KEY_ENV = "OPENAI_API_KEY"
 
@@ -42,5 +42,5 @@ class OpenAIClient:
 
         content = completion.choices[0].message.content
         if content is None or not content.strip():
-            raise LLMError("openai returned empty output")
+            raise EmptyResponseError("openai returned empty output")
         return content.strip()

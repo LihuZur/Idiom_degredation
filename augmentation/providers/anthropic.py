@@ -5,7 +5,7 @@ import os
 from anthropic import Anthropic, omit
 from anthropic.types import MessageParam
 
-from augmentation.providers.base import LLMError
+from augmentation.providers.base import EmptyResponseError, LLMError
 
 _API_KEY_ENV = "ANTHROPIC_API_KEY"
 
@@ -40,5 +40,5 @@ class AnthropicClient:
 
         text = "".join(block.text for block in message.content if block.type == "text").strip()
         if not text:
-            raise LLMError("anthropic returned empty output")
+            raise EmptyResponseError("anthropic returned empty output")
         return text

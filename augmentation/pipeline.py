@@ -32,7 +32,7 @@ from augmentation.io import (
 )
 from augmentation.llm_validators import build_judge
 from augmentation.prompts.loader import load_prompt
-from augmentation.providers.base import LLMClient, LLMError, build_client
+from augmentation.providers.base import EmptyResponseError, LLMClient, LLMError, build_client
 from augmentation.registry import get_augmenter
 from augmentation.validators import SemanticSimilarityValidator
 from cleaning.hashing import config_hash, prompt_hash
@@ -180,19 +180,27 @@ class AugmentPipeline:
     ) -> tuple[AugmentedRow, list[ValidationResult]]:
         """Augment `row` and validate it, retrying on failure per `cfg.retry`.
 
-        Raises `AugmentationError` when no attempt succeeds. `transient=True` iff
-        every attempt failed with an `LLMError` (a transport/API failure such as
-        a 429) and none actually reached — and was rejected by — the validators;
-        that case is a pause-and-resume, not a skip."""
+        Raises `AugmentationError` when no attempt succeeds. `transient=True`
+        (pause-and-resume) only when a transport/API failure (bare `LLMError`,
+        e.g. a 429) was the sole obstacle; a validation rejection or a
+        row-specific `EmptyResponseError` gives `transient=False` (skip), so the
+        run is never stuck retrying the same un-augmentable row forever."""
         cfg = self._cfg
         failing: list[str] = []
         saw_validation_fail = False
+        saw_transport_error = False
         for attempt in range(1, cfg.retry.max_attempts + 1):
             try:
                 aug = augmenter.augment(row)
                 results = [v.validate(aug, row) for v in validators]
+            except EmptyResponseError as exc:
+                failing = [f"empty_output: {exc}"]
+                if attempt < cfg.retry.max_attempts:
+                    self._backoff(attempt)
+                continue
             except LLMError as exc:
                 failing = [f"llm_error: {exc}"]
+                saw_transport_error = True
                 if attempt < cfg.retry.max_attempts:
                     self._backoff(attempt)
                 continue
@@ -207,7 +215,7 @@ class AugmentPipeline:
             variant=variant,
             failing=failing,
             attempts=cfg.retry.max_attempts,
-            transient=not saw_validation_fail,
+            transient=saw_transport_error and not saw_validation_fail,
         )
 
     def _resume(

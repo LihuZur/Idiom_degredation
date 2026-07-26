@@ -5,7 +5,7 @@ import os
 from google import genai
 from google.genai import types
 
-from augmentation.providers.base import LLMError
+from augmentation.providers.base import EmptyResponseError, LLMError
 
 _API_KEY_ENV = "GEMINI_API_KEY"
 
@@ -46,5 +46,5 @@ class GeminiClient:
 
         text = response.text
         if text is None or not text.strip():
-            raise LLMError("gemini returned empty output")
+            raise EmptyResponseError("gemini returned empty output")
         return text.strip()

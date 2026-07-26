@@ -16,7 +16,7 @@ import pytest
 
 from augmentation.io import VariantProgress, heal_variant_csv, read_variant_progress
 from augmentation.pipeline import AugmentPipeline
-from augmentation.providers.base import LLMError
+from augmentation.providers.base import EmptyResponseError, LLMError
 from cleaning.io import write_original_csv
 from data.base import DatasetRow
 from tests._augment_helpers import FakeClient, make_cfg
@@ -116,6 +116,34 @@ def test_rerun_does_not_retry_validation_skips(
     assert resumed.last_counts["paraphrase"]["resumed"] == 2
     assert _ids(paraphrase_csv) == ["1", "3"]
     assert _ids(idiomatic_csv) == ["1", "3"]
+
+
+def test_empty_output_is_skipped_not_paused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    original_csv = _write_original(tmp_path)
+    out_dir = tmp_path / "out"
+    cfg = make_cfg(cache_dir=tmp_path / "cache")
+
+    # Row 2 (x="second") always returns empty output — a row-specific failure,
+    # so it must be SKIPPED (recorded), not pause the run in an infinite retry.
+    def _augment(client: FakeClient) -> str:
+        if "second" in client.calls[-1]:
+            raise EmptyResponseError("empty")
+        return _OK
+
+    _patch_build_client(monkeypatch, FakeClient(augment_result=_augment, judge_result="PASS"))
+    pipeline = AugmentPipeline(cfg, original_csv, out_dir, tmp_path / "config.yaml")
+    paraphrase_csv, idiomatic_csv = pipeline.run()
+
+    assert not pipeline.paused  # empty output does not pause the run
+    assert _ids(paraphrase_csv) == ["1", "3"]
+    assert _ids(idiomatic_csv) == ["1", "3"]
+    para_skips = _skipped_rows(paraphrase_csv.parent / "paraphrase.meta.json")
+    assert [r["id"] for r in para_skips] == ["2"]
+    assert para_skips[0]["reason"] == "validation_failed"
+    failing = para_skips[0]["failing"]
+    assert isinstance(failing, list) and "empty_output" in failing[0]
 
 
 def test_transient_error_pauses_without_recording_a_skip(
