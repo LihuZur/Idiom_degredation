@@ -9,6 +9,11 @@ from augmentation.providers.base import EmptyResponseError, LLMError
 
 _API_KEY_ENV = "GEMINI_API_KEY"
 
+# The SDK defaults to no request timeout, so a dropped response leaves the socket
+# blocked forever and the run stalls silently. Observed rows take 5-10s; 120s is a
+# wide margin that still surfaces a hang as a retryable LLMError.
+_REQUEST_TIMEOUT_MS = 120_000
+
 
 class GeminiClient:
     """`LLMClient` backed by the Gemini Developer API (`google-genai`)."""
@@ -20,7 +25,10 @@ class GeminiClient:
         if not api_key:
             raise LLMError(f"missing {_API_KEY_ENV} environment variable")
         self.model = model
-        self._client = genai.Client(api_key=api_key)
+        self._client = genai.Client(
+            api_key=api_key,
+            http_options=types.HttpOptions(timeout=_REQUEST_TIMEOUT_MS),
+        )
 
     def complete(
         self, *, system: str, user: str, temperature: float, max_output_tokens: int
