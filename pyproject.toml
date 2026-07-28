@@ -39,6 +39,7 @@ idiom-eval = "scripts.eval:main"
 idiom-analyze = "scripts.analyze:main"
 idiom-plot-dataset = "scripts.plot_dataset:main"
 idiom-plot-summary = "scripts.plot_summary:main"
+idiom-variant-confusion = "scripts.variant_confusion:main"
 
 [dependency-groups]
 dev = [

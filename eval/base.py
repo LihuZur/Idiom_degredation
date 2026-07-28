@@ -8,6 +8,8 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, ClassVar, Literal, Protocol, runtime_checkable
 
+from tqdm import tqdm
+
 from augmentation.base import AugmentedRow, Variant
 from eval.config import EvalConfig
 from models.base import FormattedInput, Model, Prediction
@@ -101,11 +103,19 @@ class BaseEvaluator(abc.ABC):
         batch_size = self.cfg.batch.size
         predictions: list[Prediction] = []
 
+        variant = examples[0].variant if examples else "?"
+
         start_time = time.perf_counter()
-        for i in range(0, len(formatted_inputs), batch_size):
-            batch = formatted_inputs[i : i + batch_size]
-            batch_predictions = model.predict(batch)
-            predictions.extend(batch_predictions)
+        with tqdm(
+            total=len(formatted_inputs),
+            desc=f"{self.dataset}/{variant}",
+            unit="ex",
+        ) as pbar:
+            for i in range(0, len(formatted_inputs), batch_size):
+                batch = formatted_inputs[i : i + batch_size]
+                batch_predictions = model.predict(batch)
+                predictions.extend(batch_predictions)
+                pbar.update(len(batch))
         wall_time = time.perf_counter() - start_time
 
         return predictions, wall_time
