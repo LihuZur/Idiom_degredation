@@ -4,7 +4,7 @@ from typing import Any, ClassVar, Literal
 
 import eval.prompts.sst2 as sst2_prompts
 from augmentation.base import AugmentedRow
-from eval.base import BaseEvaluator
+from eval.base import BaseEvaluator, strip_reasoning_trace
 from eval.registry import register_evaluator
 from models.base import FormattedInput
 
@@ -38,7 +38,7 @@ class Sst2Evaluator(BaseEvaluator):
         )
 
     def parse(self, raw: str, ex: AugmentedRow) -> tuple[str | None, Literal["ok", "unparseable"]]:
-        s = raw.strip().lower()
+        s = strip_reasoning_trace(raw).strip().lower()
         pos_idx = s.find("positive")
         neg_idx = s.find("negative")
 

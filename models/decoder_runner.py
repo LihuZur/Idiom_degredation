@@ -60,7 +60,11 @@ class DecoderRunner(Model):
         }
         torch_dtype = dtype_map[self._precision]
 
-        # Load tokenizer
+        # Explicit flushed prints (not tqdm) so there's always visible progress in
+        # non-tty environments (e.g. Colab `!` cells), where HF's own download bars
+        # can render invisibly for the whole download and this is the only feedback
+        # until it's done - this step can take a long time on a first, cold run.
+        print(f"Loading tokenizer for {spec.hf_repo}@{spec.revision}...", flush=True)
         self._tokenizer = AutoTokenizer.from_pretrained(
             spec.hf_repo,
             revision=spec.revision,
@@ -68,8 +72,14 @@ class DecoderRunner(Model):
         )
         if self._tokenizer.pad_token is None:
             self._tokenizer.pad_token = self._tokenizer.eos_token
+        print("Tokenizer loaded.", flush=True)
 
-        # Load model
+        print(
+            f"Loading model {spec.hf_repo}@{spec.revision} "
+            f"(dtype={torch_dtype}, device={self.device})... "
+            "this downloads the weights on a first/cold run and can take a while",
+            flush=True,
+        )
         self._model = AutoModelForCausalLM.from_pretrained(
             spec.hf_repo,
             revision=spec.revision,
@@ -77,6 +87,7 @@ class DecoderRunner(Model):
         )
         self._model.to(self.device)
         self._model.eval()
+        print(f"Model loaded and moved to {self.device}.", flush=True)
 
     def predict(self, batch: list[FormattedInput]) -> list[Prediction]:
         if not batch:

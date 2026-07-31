@@ -1,0 +1,8 @@
+{
+  "dataset": "mmlu",
+  "models": [
+    "phi-4-mini-instruct",
+    "qwen3.5-1.5b-instruct"
+  ],
+  "results_dir": "results"
+}

@@ -44,6 +44,13 @@ def test_sst2_parser() -> None:
     assert evaluator.parse("positive and negative", ex) == ("1", "ok")
     assert evaluator.parse("negative and positive", ex) == ("0", "ok")
 
+    # reasoning-model <think> trace: mentions both words while reasoning, only the
+    # text after </think> should be used to determine the answer
+    assert evaluator.parse(
+        "<think>positive... no wait, negative</think>\nThe answer is positive.", ex
+    ) == ("1", "ok")
+    assert evaluator.parse("<think>positive seems likely</think>\nnegative", ex) == ("0", "ok")
+
 
 def test_mmlu_parser() -> None:
     cfg = EvalConfig(model="dummy-model")
@@ -60,6 +67,16 @@ def test_mmlu_parser() -> None:
     assert evaluator.parse("E", ex) == (None, "unparseable")
     assert evaluator.parse("5", ex) == (None, "unparseable")
     assert evaluator.parse("unknown output", ex) == (None, "unparseable")
+
+    # reasoning-model <think> trace: mentions every option while reasoning, only the
+    # text after </think> should be used to determine the answer
+    assert evaluator.parse(
+        "<think>Option A looks wrong, Option B looks wrong too</think>\nThe correct answer is C.",
+        ex,
+    ) == ("2", "ok")
+    # a truncated <think> block with no closing tag falls back to the old
+    # first-occurrence-in-full-text behavior (still unreliable, but unchanged)
+    assert evaluator.parse("<think>Option A is discussed here", ex) == ("0", "ok")
 
 
 def test_score() -> None:

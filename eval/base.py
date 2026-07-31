@@ -25,6 +25,20 @@ def _parse_meta(meta_str: str | None) -> dict[str, Any]:
         return {}
 
 
+def strip_reasoning_trace(raw: str) -> str:
+    """Drop a leading <think>...</think> block so parsers see only the final answer.
+
+    Reasoning-distill models (e.g. DeepSeek-R1 distills) always emit a chain-of-thought
+    block that mentions every answer option before concluding, regardless of system-prompt
+    instructions asking for a bare answer. Evaluator.parse() implementations must call this
+    first, or naive first-occurrence matching will pick up letters/words from the reasoning
+    instead of the model's actual final answer.
+    """
+    if "</think>" in raw:
+        return raw.split("</think>", 1)[1]
+    return raw
+
+
 @dataclass(frozen=True, slots=True)
 class RunResult:
     """Per-variant aggregate + per-example predictions for one Stage 3 run."""
@@ -106,8 +120,10 @@ class BaseEvaluator(abc.ABC):
         variant = examples[0].variant if examples else "?"
 
         start_time = time.perf_counter()
+        total = len(formatted_inputs)
+        print(f"Starting inference: {self.dataset}/{variant} ({total} examples)...", flush=True)
         with tqdm(
-            total=len(formatted_inputs),
+            total=total,
             desc=f"{self.dataset}/{variant}",
             unit="ex",
         ) as pbar:
@@ -116,6 +132,9 @@ class BaseEvaluator(abc.ABC):
                 batch_predictions = model.predict(batch)
                 predictions.extend(batch_predictions)
                 pbar.update(len(batch))
+                # Plain newline-based heartbeat as a fallback for environments (e.g.
+                # Colab `!` cells) where tqdm's `\r`-based redraws don't render live.
+                print(f"  {self.dataset}/{variant}: {len(predictions)}/{total} done", flush=True)
         wall_time = time.perf_counter() - start_time
 
         return predictions, wall_time

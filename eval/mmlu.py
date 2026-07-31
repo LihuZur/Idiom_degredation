@@ -5,7 +5,7 @@ from typing import Any, Literal
 
 import eval.prompts.mmlu as mmlu_prompts
 from augmentation.base import AugmentedRow
-from eval.base import BaseEvaluator
+from eval.base import BaseEvaluator, strip_reasoning_trace
 from eval.registry import register_evaluator
 from models.base import FormattedInput
 
@@ -48,7 +48,7 @@ class MmluEvaluator(BaseEvaluator):
         )
 
     def parse(self, raw: str, ex: AugmentedRow) -> tuple[str | None, Literal["ok", "unparseable"]]:
-        s = raw.strip().upper()
+        s = strip_reasoning_trace(raw).strip().upper()
         # Find first standalone character A, B, C, or D using word boundaries
         match = re.search(r"\b([A-D])\b", s)
         if match:
