@@ -8,6 +8,8 @@
 # batch.size confirmed fine at 8 with max_new_tokens=2048 on a 24GB L4 - the
 # earlier OOM was a stray resident process (leftover model in GPU memory from
 # a prior cell run in the same runtime), not real batch-8 memory pressure.
+# Bumped to 16 on A100 (40GB+) to better use the extra memory/bandwidth - not yet
+# stress-tested at this size, watch for OOM on the first run.
 model: deepseek-r1-distill-qwen-7b
 seed: 0
 precision: bf16
@@ -16,4 +18,4 @@ decoding:
   max_new_tokens: 2048
   do_sample: false
 batch:
-  size: 8
+  size: 16
