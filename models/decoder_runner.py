@@ -20,6 +20,7 @@ class DecoderRunner(Model):
     _spec: ModelSpec
     _precision: Precision
     _fallback_template: str | None
+    _system_role_supported: bool
     _tokenizer: Any
     _model: Any
 
@@ -89,39 +90,55 @@ class DecoderRunner(Model):
         self._model.eval()
         print(f"Model loaded and moved to {self.device}.", flush=True)
 
+        # Some chat templates (e.g. Gemma-2) reject a "system" message outright with
+        # a jinja2 TemplateError - probe once at load time and fold system into the
+        # user turn for those templates instead of failing every predict() call.
+        self._system_role_supported = True
+        if self._tokenizer.chat_template:
+            try:
+                self._tokenizer.apply_chat_template(
+                    [{"role": "system", "content": "x"}, {"role": "user", "content": "y"}],
+                    tokenize=False,
+                    add_generation_prompt=True,
+                )
+            except Exception:
+                self._system_role_supported = False
+
+    def _build_prompt(self, fi: FormattedInput) -> str:
+        messages = fi.meta.get("messages", [])
+        system_content = ""
+        user_content = ""
+        for msg in messages:
+            if msg["role"] == "system":
+                system_content = msg["content"]
+            elif msg["role"] == "user":
+                user_content = msg["content"]
+
+        if not self._tokenizer.chat_template:
+            if not self._fallback_template:
+                raise ValueError(
+                    f"Tokenizer for {self.id} has no chat template and no fallback template was provided."
+                )
+            return self._fallback_template.format(system=system_content, user=user_content)
+
+        if system_content and not self._system_role_supported:
+            chat_messages = [{"role": "user", "content": f"{system_content}\n\n{user_content}"}]
+        else:
+            chat_messages = messages
+        prompt = self._tokenizer.apply_chat_template(
+            chat_messages,
+            tokenize=False,
+            add_generation_prompt=True,
+        )
+        if not isinstance(prompt, str):
+            raise TypeError("Expected apply_chat_template to return a string")
+        return prompt
+
     def predict(self, batch: list[FormattedInput]) -> list[Prediction]:
         if not batch:
             return []
 
-        prompts: list[str] = []
-        for fi in batch:
-            messages = fi.meta.get("messages", [])
-            system_content = ""
-            user_content = ""
-            for msg in messages:
-                if msg["role"] == "system":
-                    system_content = msg["content"]
-                elif msg["role"] == "user":
-                    user_content = msg["content"]
-
-            if self._tokenizer.chat_template:
-                prompt = self._tokenizer.apply_chat_template(
-                    messages,
-                    tokenize=False,
-                    add_generation_prompt=True,
-                )
-                if not isinstance(prompt, str):
-                    raise TypeError("Expected apply_chat_template to return a string")
-            else:
-                if not self._fallback_template:
-                    raise ValueError(
-                        f"Tokenizer for {self.id} has no chat template and no fallback template was provided."
-                    )
-                prompt = self._fallback_template.format(
-                    system=system_content,
-                    user=user_content,
-                )
-            prompts.append(prompt)
+        prompts = [self._build_prompt(fi) for fi in batch]
 
         # Retrieve generation kwargs from the first item
         gen_kwargs = batch[0].meta.get("generate_kwargs", {})

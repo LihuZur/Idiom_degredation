@@ -303,6 +303,49 @@ def _resolve_checkpoint(
     return checkpoint_file, prior_checkpoint
 
 
+def _build_per_task(
+    dataset: str,
+    variants_to_run: list[str],
+    run_results: dict[str, RunResult],
+) -> list[dict[str, Any]]:
+    first_var = variants_to_run[0]
+    csv_path = Path("datasets_out") / dataset / f"{first_var}.csv"
+    id_to_y = {}
+    with csv_path.open(encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            id_to_y[row["id"]] = row["y"]
+
+    pred_maps = {var: {p.id: p for p in res.predictions} for var, res in run_results.items()}
+
+    # analysis.results.load_result() requires every per_task row to have all
+    # variants_to_run present - build only over ids common to every variant (original.csv
+    # can have ids that augmentation's reconciliation dropped from paraphrase/idiomatic).
+    common_ids = set(pred_maps[first_var])
+    for var in variants_to_run[1:]:
+        common_ids &= set(pred_maps[var])
+
+    per_task = []
+    for p_first in run_results[first_var].predictions:
+        task_id = p_first.id
+        if task_id not in common_ids:
+            continue
+        task_obj: dict[str, Any] = {
+            "id": task_id,
+            "y": id_to_y.get(task_id, ""),
+        }
+        for var in variants_to_run:
+            p = pred_maps[var][task_id]
+            task_obj[var] = {
+                "raw": p.raw,
+                "parsed": p.parsed,
+                "parse_status": p.meta.get("parse_status", "ok"),
+                "correct": p.meta.get("correct", False),
+            }
+        per_task.append(task_obj)
+    return per_task
+
+
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})
 @click.option(
     "--config",
@@ -400,33 +443,7 @@ def main(
         )
 
     # Get y labels and build per_task
-    first_var = variants_to_run[0]
-    csv_path = Path("datasets_out") / dataset / f"{first_var}.csv"
-    id_to_y = {}
-    with csv_path.open(encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            id_to_y[row["id"]] = row["y"]
-
-    pred_maps = {var: {p.id: p for p in res.predictions} for var, res in run_results.items()}
-
-    per_task = []
-    for p_first in run_results[first_var].predictions:
-        task_id = p_first.id
-        task_obj: dict[str, Any] = {
-            "id": task_id,
-            "y": id_to_y.get(task_id, ""),
-        }
-        for var in variants_to_run:
-            if var in pred_maps and task_id in pred_maps[var]:
-                p = pred_maps[var][task_id]
-                task_obj[var] = {
-                    "raw": p.raw,
-                    "parsed": p.parsed,
-                    "parse_status": p.meta.get("parse_status", "ok"),
-                    "correct": p.meta.get("correct", False),
-                }
-        per_task.append(task_obj)
+    per_task = _build_per_task(dataset, variants_to_run, run_results)
 
     metrics_dict = {var: res.metrics for var, res in run_results.items()}
     unparseable_ids_dict = {
