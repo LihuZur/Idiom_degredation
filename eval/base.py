@@ -40,6 +40,27 @@ def strip_reasoning_trace(raw: str) -> str:
     return raw
 
 
+# Model ids that always emit a <think>...</think> chain-of-thought before their final
+# answer (STAGE3_PLAN reasoning-distill models). Keep in sync with models/registry.py.
+_REASONING_MODELS = frozenset({"deepseek-r1-distill-qwen-7b"})
+
+
+def is_reasoning_model(model_name: str) -> bool:
+    """Whether `model_name` is a reasoning-distill model that emits a <think> trace."""
+    return model_name in _REASONING_MODELS
+
+
+def reasoning_output_truncated(raw: str, model_name: str) -> bool:
+    """True if a reasoning model's generation was cut off before closing its <think> block.
+
+    max_new_tokens is only a cap, not a guarantee: a reasoning trace can still exceed it,
+    leaving no closing `</think>` in `raw`. In that case the model never actually stated its
+    final answer, so callers must treat the output as unparseable instead of naively
+    searching the incomplete reasoning trace for an answer-shaped token.
+    """
+    return is_reasoning_model(model_name) and "</think>" not in raw
+
+
 @dataclass(frozen=True, slots=True)
 class RunResult:
     """Per-variant aggregate + per-example predictions for one Stage 3 run."""
