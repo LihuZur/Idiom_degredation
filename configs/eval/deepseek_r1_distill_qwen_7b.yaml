@@ -2,12 +2,18 @@
 # This is a reasoning distill model that emits <think>...</think> chain-of-thought
 # before its final answer, so max_new_tokens is raised well above the 32 used for
 # the direct instruct models to leave room for the reasoning trace.
+# 512 was too tight: 57.7% of mmlu responses got cut off mid-reasoning before ever
+# stating an answer (measured on the real run), so raised to 2048 to let the model
+# actually finish thinking instead of truncating it.
+# batch.size confirmed fine at 8 with max_new_tokens=2048 on a 24GB L4 - the
+# earlier OOM was a stray resident process (leftover model in GPU memory from
+# a prior cell run in the same runtime), not real batch-8 memory pressure.
 model: deepseek-r1-distill-qwen-7b
 seed: 0
 precision: bf16
 decoding:
   temperature: 0.0
-  max_new_tokens: 512
+  max_new_tokens: 2048
   do_sample: false
 batch:
   size: 8
