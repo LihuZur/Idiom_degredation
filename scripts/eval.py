@@ -5,6 +5,7 @@ import hashlib
 import json
 import platform
 import random
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
@@ -177,26 +178,129 @@ def _replay_results(
     return run_results
 
 
+def _prediction_from_checkpoint(d: dict[str, Any]) -> Prediction:
+    return Prediction(id=d["id"], raw=d["raw"], parsed=d["parsed"], meta=d["meta"])
+
+
+def _predictions_to_checkpoint(predictions: list[Prediction]) -> list[dict[str, Any]]:
+    return [{"id": p.id, "raw": p.raw, "parsed": p.parsed, "meta": p.meta} for p in predictions]
+
+
+def _make_checkpoint_callback(
+    checkpoint_file: Path,
+    checkpoint_state: dict[str, Any],
+    var: str,
+    merged_so_far: list[Prediction],
+    prior_wall_time: float,
+) -> Callable[[list[Prediction]], None]:
+    """Build a per-variant callback that appends a batch and re-persists the checkpoint."""
+
+    def _on_new_predictions(batch: list[Prediction]) -> None:
+        merged_so_far.extend(batch)
+        checkpoint_state.setdefault("variants", {})[var] = {
+            "predictions": _predictions_to_checkpoint(merged_so_far),
+            "wall_time_seconds": prior_wall_time,
+        }
+        write_result(checkpoint_file, checkpoint_state)
+
+    return _on_new_predictions
+
+
 def _run_inference(
     cfg: EvalConfig,
     dataset: str,
     variants_to_run: list[str],
     limit: int | None,
     evaluator: Any,
+    checkpoint_file: Path | None = None,
+    checkpoint_state: dict[str, Any] | None = None,
 ) -> dict[str, RunResult]:
-    """Run model inference normally (STAGE3_PLAN §1)."""
+    """Run model inference normally, checkpointing progress after every batch if requested."""
     model_spec = get_model_spec(cfg.model)
     runner_cls = get_model_class(cfg.model)
 
     concrete_runner_cls = cast(type[DecoderRunner], runner_cls)
     runner = concrete_runner_cls(model_spec, precision=cfg.precision)
 
+    checkpoint_state = checkpoint_state if checkpoint_state is not None else {}
+
     run_results = {}
     for var in variants_to_run:
         csv_path = Path("datasets_out") / dataset / f"{var}.csv"
-        res = evaluator.run_variant(runner, csv_path, limit=limit)
+
+        prior_variant = checkpoint_state.get("variants", {}).get(var, {})
+        already_done = {
+            d["id"]: _prediction_from_checkpoint(d) for d in prior_variant.get("predictions", [])
+        }
+        prior_wall_time = prior_variant.get("wall_time_seconds", 0.0)
+        if already_done:
+            click.echo(f"  {dataset}/{var}: resuming, {len(already_done)} example(s) already done")
+
+        on_new_predictions: Callable[[list[Prediction]], None] | None = None
+        if checkpoint_file is not None:
+            on_new_predictions = _make_checkpoint_callback(
+                checkpoint_file,
+                checkpoint_state,
+                var,
+                list(already_done.values()),
+                prior_wall_time,
+            )
+
+        res = evaluator.run_variant(
+            runner,
+            csv_path,
+            limit=limit,
+            already_done=already_done,
+            prior_wall_time=prior_wall_time,
+            on_new_predictions=on_new_predictions,
+        )
         run_results[var] = res
+
+        if checkpoint_file is not None:
+            checkpoint_state.setdefault("variants", {})[var] = {
+                "predictions": _predictions_to_checkpoint(res.predictions),
+                "wall_time_seconds": res.meta.get("wall_time_seconds", 0.0),
+            }
+            write_result(checkpoint_file, checkpoint_state)
+
     return run_results
+
+
+def _resolve_checkpoint(
+    checkpoint_dir: Path | None,
+    dataset: str,
+    model: str,
+    prompt_hash: str,
+    config_hash_val: str,
+) -> tuple[Path | None, dict[str, Any]]:
+    """Load a prior checkpoint for this dataset+model, or seed a fresh one."""
+    if checkpoint_dir is None:
+        return None, {}
+
+    checkpoint_file = checkpoint_dir / dataset / f"{model.replace('/', '_')}.checkpoint.json"
+    if not checkpoint_file.exists():
+        checkpoint_state = {
+            "dataset": dataset,
+            "model_id": model,
+            "prompt_hash": prompt_hash,
+            "config_hash": config_hash_val,
+            "variants": {},
+        }
+        return checkpoint_file, checkpoint_state
+
+    prior_checkpoint = load_result(checkpoint_file)
+    if prior_checkpoint.get("prompt_hash") != prompt_hash:
+        raise click.ClickException(
+            "Checkpoint prompt hash mismatch (prior run used a different prompt); "
+            f"refusing to resume from stale checkpoint: {checkpoint_file}"
+        )
+    if prior_checkpoint.get("config_hash") != config_hash_val:
+        raise click.ClickException(
+            "Checkpoint config hash mismatch (prior run used a different config); "
+            f"refusing to resume from stale checkpoint: {checkpoint_file}"
+        )
+    click.echo(f"Resuming from checkpoint: {checkpoint_file}")
+    return checkpoint_file, prior_checkpoint
 
 
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})
@@ -228,6 +332,14 @@ def _run_inference(
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
     help="Replay parsing + metrics from a prior result JSON.",
 )
+@click.option(
+    "--checkpoint-dir",
+    default=None,
+    type=click.Path(path_type=Path),
+    help="Directory to save/read mid-run checkpoints (e.g. a mounted Drive folder), so a "
+    "crashed/disconnected run can resume from the last completed batch instead of "
+    "restarting a variant from scratch.",
+)
 def main(
     config: Path,
     dataset: str,
@@ -237,6 +349,7 @@ def main(
     limit: int | None,
     force: bool,
     from_results: Path | None,
+    checkpoint_dir: Path | None,
 ) -> None:
     """Stage 3: evaluate model on a dataset's variant triple."""
     # Load and validate config
@@ -256,6 +369,10 @@ def main(
         (current_system + "\x1e" + current_user_template).encode("utf-8")
     ).hexdigest()[:16]
 
+    resolved_config_dict = cfg.model_dump()
+    resolved_config_json = json.dumps(resolved_config_dict, sort_keys=True)
+    config_hash_val = hashlib.sha256(resolved_config_json.encode("utf-8")).hexdigest()[:16]
+
     # Resolve variants to run
     variants_to_run = resolve_variants(dataset, variants)
     if not variants_to_run:
@@ -269,10 +386,18 @@ def main(
     precision_str = cfg.precision or model_spec.default_precision
     device_type = select_device().type
 
+    checkpoint_file, checkpoint_state = (
+        _resolve_checkpoint(checkpoint_dir, dataset, cfg.model, prompt_hash, config_hash_val)
+        if from_results is None
+        else (None, {})
+    )
+
     if from_results is not None:
         run_results = _replay_results(dataset, variants_to_run, limit, from_results, evaluator)
     else:
-        run_results = _run_inference(cfg, dataset, variants_to_run, limit, evaluator)
+        run_results = _run_inference(
+            cfg, dataset, variants_to_run, limit, evaluator, checkpoint_file, checkpoint_state
+        )
 
     # Get y labels and build per_task
     first_var = variants_to_run[0]
@@ -311,10 +436,6 @@ def main(
         var: res.meta.get("wall_time_seconds", 0.0) for var, res in run_results.items()
     }
 
-    resolved_config_dict = cfg.model_dump()
-    resolved_config_json = json.dumps(resolved_config_dict, sort_keys=True)
-    config_hash_val = hashlib.sha256(resolved_config_json.encode("utf-8")).hexdigest()[:16]
-
     result_json = {
         "stage": "eval",
         "dataset": dataset,
@@ -344,6 +465,9 @@ def main(
 
     write_result(out_path, result_json)
     click.echo(f"Results successfully written to {out_path}")
+
+    if checkpoint_file is not None and checkpoint_file.exists():
+        checkpoint_file.unlink()
 
 
 if __name__ == "__main__":

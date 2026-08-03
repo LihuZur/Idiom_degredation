@@ -4,6 +4,7 @@ import abc
 import csv
 import json
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, ClassVar, Literal, Protocol, runtime_checkable
@@ -109,13 +110,33 @@ class BaseEvaluator(abc.ABC):
 
         return rows
 
+    def _score_batch(
+        self, predictions: list[Prediction], examples: list[AugmentedRow]
+    ) -> list[Prediction]:
+        """Parse and score one batch of raw predictions against their examples."""
+        scored: list[Prediction] = []
+        for pred, ex in zip(predictions, examples, strict=True):
+            parsed, parse_status = self.parse(pred.raw, ex)
+            correct = self.score(parsed, ex.y)
+            new_meta = dict(pred.meta)
+            new_meta.update({"parse_status": parse_status, "correct": correct})
+            scored.append(replace(pred, parsed=parsed, meta=new_meta))
+        return scored
+
     def _run_inference(
-        self, model: Model, examples: list[AugmentedRow]
+        self,
+        model: Model,
+        examples: list[AugmentedRow],
+        on_new_predictions: Callable[[list[Prediction]], None] | None = None,
     ) -> tuple[list[Prediction], float]:
-        """Run batch inference on the examples and return predictions and wall time."""
+        """Run batch inference, scoring each batch immediately so progress can be checkpointed.
+
+        `on_new_predictions`, if given, is called with each freshly-scored batch as soon
+        as it's ready, so a caller can persist progress to disk before the next batch runs.
+        """
         formatted_inputs = [self.format(ex) for ex in examples]
         batch_size = self.cfg.batch.size
-        predictions: list[Prediction] = []
+        scored: list[Prediction] = []
 
         variant = examples[0].variant if examples else "?"
 
@@ -129,49 +150,30 @@ class BaseEvaluator(abc.ABC):
         ) as pbar:
             for i in range(0, len(formatted_inputs), batch_size):
                 batch = formatted_inputs[i : i + batch_size]
+                batch_examples = examples[i : i + batch_size]
                 batch_predictions = model.predict(batch)
-                predictions.extend(batch_predictions)
-                pbar.update(len(batch))
+                batch_scored = self._score_batch(batch_predictions, batch_examples)
+                scored.extend(batch_scored)
+                if on_new_predictions is not None:
+                    on_new_predictions(batch_scored)
+                pbar.update(len(batch_scored))
                 # Plain newline-based heartbeat as a fallback for environments (e.g.
                 # Colab `!` cells) where tqdm's `\r`-based redraws don't render live.
-                print(f"  {self.dataset}/{variant}: {len(predictions)}/{total} done", flush=True)
+                print(f"  {self.dataset}/{variant}: {len(scored)}/{total} done", flush=True)
         wall_time = time.perf_counter() - start_time
 
-        return predictions, wall_time
+        return scored, wall_time
 
-    def _process_results(
-        self,
-        predictions: list[Prediction],
-        examples: list[AugmentedRow],
-        wall_time: float,
+    def _aggregate(
+        self, variant: Variant, scored_predictions: list[Prediction], wall_time: float
     ) -> RunResult:
-        """Parse predictions, score them, and build the RunResult."""
-        variant = examples[0].variant
-        scored_predictions: list[Prediction] = []
-        unparseable_ids: list[str] = []
-        n_unparseable = 0
-        n_correct = 0
-
-        for pred, ex in zip(predictions, examples, strict=True):
-            parsed, parse_status = self.parse(pred.raw, ex)
-            correct = self.score(parsed, ex.y)
-
-            if parse_status == "unparseable":
-                unparseable_ids.append(ex.id)
-                n_unparseable += 1
-            if correct:
-                n_correct += 1
-
-            new_meta = dict(pred.meta)
-            new_meta.update(
-                {
-                    "parse_status": parse_status,
-                    "correct": correct,
-                }
-            )
-            scored_predictions.append(replace(pred, parsed=parsed, meta=new_meta))
-
-        n = len(examples)
+        """Build the RunResult (metrics + meta) from already-scored predictions."""
+        n = len(scored_predictions)
+        n_correct = sum(1 for p in scored_predictions if p.meta.get("correct"))
+        unparseable_ids = [
+            p.id for p in scored_predictions if p.meta.get("parse_status") == "unparseable"
+        ]
+        n_unparseable = len(unparseable_ids)
         accuracy = n_correct / n if n > 0 else 0.0
         unparseable_rate = n_unparseable / n if n > 0 else 0.0
 
@@ -181,12 +183,10 @@ class BaseEvaluator(abc.ABC):
             "n": float(n),
             "n_unparseable": float(n_unparseable),
         }
-
         meta = {
             "unparseable_ids": unparseable_ids,
             "wall_time_seconds": wall_time,
         }
-
         return RunResult(
             variant=variant,
             metrics=metrics,
@@ -194,8 +194,32 @@ class BaseEvaluator(abc.ABC):
             meta=meta,
         )
 
-    def run_variant(self, model: Model, variant_csv: Path, limit: int | None = None) -> RunResult:
-        """Evaluate a model on a variant CSV file."""
+    def run_variant(
+        self,
+        model: Model,
+        variant_csv: Path,
+        limit: int | None = None,
+        already_done: dict[str, Prediction] | None = None,
+        prior_wall_time: float = 0.0,
+        on_new_predictions: Callable[[list[Prediction]], None] | None = None,
+    ) -> RunResult:
+        """Evaluate a model on a variant CSV file.
+
+        `already_done` (example id -> already-scored Prediction) lets a resumed run
+        skip examples a prior session already completed; only the remaining rows go
+        through inference. `on_new_predictions` is invoked with each freshly-scored
+        batch so a caller can checkpoint progress to disk mid-run.
+        """
         examples = self._load_rows(variant_csv, limit)
-        predictions, wall_time = self._run_inference(model, examples)
-        return self._process_results(predictions, examples, wall_time)
+        already_done = already_done or {}
+        remaining = [ex for ex in examples if ex.id not in already_done]
+
+        if remaining:
+            new_scored, new_wall_time = self._run_inference(model, remaining, on_new_predictions)
+        else:
+            new_scored, new_wall_time = [], 0.0
+
+        by_id = {**already_done, **{p.id: p for p in new_scored}}
+        merged = [by_id[ex.id] for ex in examples if ex.id in by_id]
+
+        return self._aggregate(examples[0].variant, merged, prior_wall_time + new_wall_time)

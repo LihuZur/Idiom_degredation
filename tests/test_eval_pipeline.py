@@ -105,3 +105,46 @@ def test_run_variant(tmp_path: Path) -> None:
     res_limit = evaluator.run_variant(model, csv_path, limit=3)
     assert res_limit.metrics["n"] == 3.0
     assert len(res_limit.predictions) == 3
+
+
+def test_run_variant_resumes_from_already_done(tmp_path: Path) -> None:
+    """A resumed run should only run inference on rows missing from `already_done`."""
+    csv_path = tmp_path / "original.csv"
+    headers = ["id", "variant", "x", "y", "meta", "augmenter_model", "prompt_hash", "validators"]
+    rows = [
+        ["1", "original", "I love this!", "1", "{}", "", "", ""],
+        ["2", "original", "I hate this.", "0", "{}", "", "", ""],
+        ["3", "original", "Awesome product.", "1", "{}", "", "", ""],
+    ]
+    with csv_path.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(headers)
+        writer.writerows(rows)
+
+    cfg = EvalConfig(model="fake-model")
+    evaluator = DummyEvaluator(cfg)
+    model = FakeModel()
+
+    # Row "1" was already completed by a prior (crashed) session.
+    already_done = {
+        "1": Prediction(
+            id="1", raw="positive", parsed="1", meta={"parse_status": "ok", "correct": True}
+        )
+    }
+
+    new_batches: list[list[Prediction]] = []
+    res = evaluator.run_variant(
+        model,
+        csv_path,
+        already_done=already_done,
+        prior_wall_time=10.0,
+        on_new_predictions=new_batches.append,
+    )
+
+    # Only rows 2 and 3 should have gone through the (fake) model.
+    assert {p.id for batch in new_batches for p in batch} == {"2", "3"}
+    # But the merged result covers all 3 rows, in original CSV order.
+    assert [p.id for p in res.predictions] == ["1", "2", "3"]
+    assert res.metrics["n"] == 3.0
+    # Wall time accumulates on top of the prior session's recorded time.
+    assert res.meta["wall_time_seconds"] >= 10.0
