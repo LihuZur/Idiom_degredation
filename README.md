@@ -90,6 +90,9 @@ Trimmed subset of the original proposal, with new families added:
 - SmolLM2-1.7B-Instruct *(ungated, different pretraining lineage; small-model comparison point)*
 - Llama-3.2-1B-Instruct *(gated on HF, pending manual review; smallest model in the roster)*
 - Qwen3.5-0.5B-Instruct *(ungated; smaller sibling of Qwen3.5-1.5B-Instruct, testing whether its idiomatic-degradation signal scales with size within the Qwen family)*
+- Qwen3.5-3B-Instruct *(ungated; fills the capability gap between Qwen3.5-1.5B-Instruct, the only model with a significant mmlu idiomatic-degradation result, and Qwen3.5-7B-Instruct, which shows a much weaker effect)*
+- Gemma-4-2B-Instruct *(gated on HF, same license as Gemma-4-9B-Instruct; smaller sibling to test the same capability-sweet-spot hypothesis)*
+- StableLM-2-1.6B-Chat *(ungated; different architecture/lineage at a similar size to the sweet-spot models above)*
 
 ## 5. Pipeline Overview
 
