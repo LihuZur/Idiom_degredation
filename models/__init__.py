@@ -22,6 +22,9 @@ from models import (
     phi4_mini_instruct as phi4_mini_instruct,
 )
 from models import (
+    qwen3p5_0p5b_instruct as qwen3p5_0p5b_instruct,
+)
+from models import (
     qwen3p5_1p5b_instruct as qwen3p5_1p5b_instruct,
 )
 from models import (

@@ -88,7 +88,8 @@ Trimmed subset of the original proposal, with new families added:
 - Phi-4-mini-instruct
 - DeepSeek-R1-Distill-Qwen-7B
 - SmolLM2-1.7B-Instruct *(ungated, different pretraining lineage; small-model comparison point)*
-- Llama-3.2-1B-Instruct *(gated on HF; smallest model in the roster)*
+- Llama-3.2-1B-Instruct *(gated on HF, pending manual review; smallest model in the roster)*
+- Qwen3.5-0.5B-Instruct *(ungated; smaller sibling of Qwen3.5-1.5B-Instruct, testing whether its idiomatic-degradation signal scales with size within the Qwen family)*
 
 ## 5. Pipeline Overview
 

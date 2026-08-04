@@ -24,6 +24,7 @@ def test_dataset_registry_has_sst2_and_mmlu() -> None:
         "llama-3.2-1b-instruct",
         "mistral-7b-instruct-v0.3",
         "phi-4-mini-instruct",
+        "qwen3.5-0.5b-instruct",
         "qwen3.5-1.5b-instruct",
         "qwen3.5-7b-instruct",
         "smollm2-1.7b-instruct",

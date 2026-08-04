@@ -1,0 +1,10 @@
+# Configuration for Qwen 3.5 0.5B Instruct model (backed by Qwen 2.5)
+model: qwen3.5-0.5b-instruct
+seed: 0
+precision: bf16
+decoding:
+  temperature: 0.0
+  max_new_tokens: 32
+  do_sample: false
+batch:
+  size: 8
