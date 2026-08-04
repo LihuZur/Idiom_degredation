@@ -87,6 +87,8 @@ Trimmed subset of the original proposal, with new families added:
 - Mistral-7B-Instruct-v0.3
 - Phi-4-mini-instruct
 - DeepSeek-R1-Distill-Qwen-7B
+- SmolLM2-1.7B-Instruct *(ungated, different pretraining lineage; small-model comparison point)*
+- Llama-3.2-1B-Instruct *(gated on HF; smallest model in the roster)*
 
 ## 5. Pipeline Overview
 

@@ -1,0 +1,10 @@
+# Configuration for Llama 3.2 1B Instruct model (gated on HF; requires accepted license + access-enabled token)
+model: llama-3.2-1b-instruct
+seed: 0
+precision: bf16
+decoding:
+  temperature: 0.0
+  max_new_tokens: 32
+  do_sample: false
+batch:
+  size: 8

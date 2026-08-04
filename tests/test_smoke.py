@@ -21,10 +21,12 @@ def test_dataset_registry_has_sst2_and_mmlu() -> None:
     assert model_reg.list_models() == [
         "deepseek-r1-distill-qwen-7b",
         "gemma-4-9b-instruct",
+        "llama-3.2-1b-instruct",
         "mistral-7b-instruct-v0.3",
         "phi-4-mini-instruct",
         "qwen3.5-1.5b-instruct",
         "qwen3.5-7b-instruct",
+        "smollm2-1.7b-instruct",
     ]
     assert aug_reg.list_augmenters() == ["anthropic", "gemini", "openai"]
     assert set(aug_reg.list_validators()) == {

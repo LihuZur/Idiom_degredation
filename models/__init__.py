@@ -13,6 +13,9 @@ from models import (
     gemma4_9b_instruct as gemma4_9b_instruct,
 )
 from models import (
+    llama3p2_1b_instruct as llama3p2_1b_instruct,
+)
+from models import (
     mistral7b_instruct_v03 as mistral7b_instruct_v03,
 )
 from models import (
@@ -23,4 +26,7 @@ from models import (
 )
 from models import (
     qwen3p5_7b_instruct as qwen3p5_7b_instruct,
+)
+from models import (
+    smollm2_1p7b_instruct as smollm2_1p7b_instruct,
 )
