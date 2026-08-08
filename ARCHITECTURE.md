@@ -21,7 +21,7 @@ cross-run step that aggregates results and produces tables and figures.
   "flowchart": { "nodeSpacing": 60, "rankSpacing": 70, "htmlLabels": true, "useMaxWidth": true }
 }}%%
 flowchart TB
-    A["Raw HF datasets<br/>SST-2 · MMLU"]
+    A["Raw HF datasets<br/>SST-2 · MMLU · MNLI"]
     C["Stage 1 — Cleaning<br/>filter · normalize · dedupe"]
     Do[("original.csv")]
     B["Stage 2 — Augmentation<br/>cleaned CSV + augmenter"]
@@ -65,9 +65,15 @@ Key points:
 
 **Responsibilities**
 
-- Load raw datasets from Hugging Face (`sst2`, `mmlu`).
+- Load raw datasets from Hugging Face (`sst2`, `mmlu`, `mnli`).
 - Normalize into a shared in-memory schema (`DatasetRow` = `id`, `x`, `y`,
   `meta`).
+- For sentence-pair tasks, put the rewritten side in `x` and the fixed side in
+  `meta`: only `x` is rewritten downstream, so MNLI's `hypothesis` lives in
+  `meta` and stays byte-identical across the variant triple. `meta` reaches a
+  prompt only through `augmentation/prompts/loader.py:render_context`, which is
+  allowlist-based — anything not named there (e.g. MMLU `answer_index`, MNLI
+  `prompt_id`/`genre`) can never leak into a prompt.
 - Provide deterministic loading and caching.
 - Expose each dataset through a **registry** so new datasets can be added
   without touching any other module.
@@ -275,8 +281,10 @@ class Model(Protocol):
   the three CSVs `datasets_out/{dataset}/{original,paraphrase,idiomatic}.csv`
   and run inference on all three with the **same** dataset-specific prompt
   and instructions — only `x` changes between the three runs.
-- One prompt formatter per dataset (SST-2, MMLU); same formatter is applied
-  to all three variants of that dataset.
+- One prompt formatter per dataset (SST-2, MMLU, MNLI); same formatter is
+  applied to all three variants of that dataset. Formatters may read the
+  fixed side of a pair out of `meta` (MNLI's `hypothesis`), which is identical
+  across variants — so `x` really is the only thing that changes.
 - Metric functions matching each dataset's original paper.
 - Batched evaluation loop that yields per-example predictions and per-run
   aggregate metrics.

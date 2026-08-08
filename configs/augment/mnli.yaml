@@ -1,0 +1,41 @@
+# Stage 2 (augmentation) config for mnli. See configs/augment/example.yaml
+# for the full annotated schema.
+
+dataset: mnli
+seed: 0
+
+augmenter: gemini
+augmenter_model: gemini-3.6-flash
+
+decoding:
+  temperature: 0.7
+  max_output_tokens: 1536
+
+judge:
+  temperature: 0.0
+  max_output_tokens: 512
+
+retry:
+  max_attempts: 3
+  backoff_seconds: 2.0
+
+# D5: NLI-specific templates. The shared *_v1.txt files stay untouched so
+# MMLU/SST-2 prompt hashes — and their warm augment caches — are unaffected.
+prompts:
+  paraphrase: paraphrase_nli_v1.txt
+  idiomatic:  idiomatic_nli_v1.txt
+
+validators:
+  semantic_similarity:
+    embedding_model: null
+    min_cosine: 0.80
+  label_preservation:
+    method: llm_judge
+  idiom_presence:
+    method: llm_judge
+  idiom_absence:
+    method: llm_judge
+
+cache:
+  enabled: true
+  dir: .hf_cache/augment

@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+import pytest
 import torch
 
 from analysis.aggregate import aggregate
@@ -16,8 +17,8 @@ _CI = 0.95
 _SEED = 0
 
 
-def test_dataset_registry_has_sst2_and_mmlu() -> None:
-    assert set(data_reg.list_datasets()) == {"sst2", "mmlu"}
+def test_dataset_registry_has_sst2_mmlu_and_mnli() -> None:
+    assert set(data_reg.list_datasets()) == {"sst2", "mmlu", "mnli"}
     assert model_reg.list_models() == [
         "deepseek-r1-distill-qwen-7b",
         "gemma-4-2b-instruct",
@@ -47,6 +48,16 @@ def test_select_device_returns_valid_torch_device() -> None:
     assert dev.type in {"cuda", "mps", "cpu"}
 
 
+@pytest.mark.xfail(
+    reason=(
+        "Stale since real augmentation landed (R12). Two independent problems: the "
+        "identity-phase premise is no longer true — paraphrase/idiomatic now differ "
+        "from original, so deltas are not zero — and `results/` has no tracked files, "
+        "so this reads whatever happens to be on the local disk. Kept as xfail rather "
+        "than skip so it flags if it ever starts passing. Real fix is separate scope."
+    ),
+    strict=False,
+)
 def test_stage4_over_committed_results_is_identity_phase(tmp_path: Path) -> None:
     """End-to-end Stage 4 over the committed `results/` dir (real identity-phase data).
 

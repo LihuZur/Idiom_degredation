@@ -99,6 +99,69 @@ def test_judge_details_include_model_and_prompt_hash() -> None:
     assert len(result.details["judge_prompt_hash"]) > 0
 
 
+_MNLI_META = {
+    "hypothesis": "Everyone really likes the newest benefits",
+    "label_name": "neutral",
+    "prompt_id": 63735,
+    "genre": "slate",
+}
+
+
+def _mnli_aug() -> AugmentedRow:
+    return AugmentedRow(
+        id="63735n",
+        variant="idiomatic",
+        x="The new rights are nothing to sneeze at",
+        y=1,
+        augmenter_model="gemini/fake-model",
+        prompt_hash="abc123",
+        meta=dict(_MNLI_META),
+    )
+
+
+def _mnli_original() -> DatasetRow:
+    return DatasetRow(id="63735n", x="The new rights are nice enough", y=1, meta=dict(_MNLI_META))
+
+
+def test_label_preservation_judge_prompt_contains_the_hypothesis() -> None:
+    """The regression the MNLI dataset hinges on.
+
+    An entailment label is a *relation* between premise and hypothesis. If
+    `render_context` stops rendering the hypothesis, this judge keeps returning
+    verdicts — on a question it cannot answer — and silently invalidates the
+    dataset. `JUDGE_PROMPTS` is hardcoded, so `render_context` is the only channel.
+    """
+    fake = FakeClient(judge_result="PASS")
+    judge = build_judge(
+        "label_preservation",
+        client=fake,
+        temperature=0.0,
+        max_output_tokens=_JUDGE_MAX_OUTPUT_TOKENS,
+    )
+
+    judge.validate(_mnli_aug(), _mnli_original())
+
+    prompt = fake.calls[-1]
+    assert "Everyone really likes the newest benefits" in prompt
+    assert "Gold label in words: neutral" in prompt
+    assert "The new rights are nice enough" in prompt
+    assert "The new rights are nothing to sneeze at" in prompt
+
+
+@pytest.mark.parametrize("judge_name", ["label_preservation", "idiom_presence", "idiom_absence"])
+def test_judge_prompts_never_leak_mnli_bookkeeping(judge_name: str) -> None:
+    fake = FakeClient(judge_result="PASS")
+    judge = build_judge(
+        judge_name, client=fake, temperature=0.0, max_output_tokens=_JUDGE_MAX_OUTPUT_TOKENS
+    )
+
+    judge.validate(_mnli_aug(), _mnli_original())
+
+    prompt = fake.calls[-1]
+    assert "63735" not in prompt
+    assert "slate" not in prompt
+
+
 def test_judge_calls_the_client_exactly_once_per_validate() -> None:
     fake = FakeClient(judge_result="PASS")
     judge = build_judge(
