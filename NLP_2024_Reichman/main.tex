@@ -1,13 +1,62 @@
-\documentclass{article}
+\documentclass[11pt]{article}
+\usepackage[letterpaper,margin=1in]{geometry}
+\usepackage{microtype}   % better justification at the wider measure
 \usepackage[utf8]{inputenc}
 \usepackage{amsmath}
 \usepackage{graphicx}
-\usepackage{natbib}
+\usepackage[numbers,sort&compress]{natbib}
 \usepackage{booktabs}
-\usepackage[hidelinks]{hyperref}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\definecolor{linknavy}{RGB}{0,70,140}
+\hypersetup{
+  colorlinks = true,
+  citecolor  = linknavy,   % [1] citation numbers -> jump to the bibliography
+  linkcolor  = linknavy,   % \ref / \S cross-references
+  urlcolor   = linknavy,   % \url and bibliography links
+  breaklinks = true,
+}
 \usepackage{parskip}
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta, positioning, calc}
+
+% --- Short-form reference in the page footer at every citation -------------
+% \citetf / \citepf behave exactly like \citet / \citep, and additionally drop
+% a short-form note into the footer of the page where the citation occurs:
+%     [6] Socher et al. (2013), Recursive Deep Models..., EMNLP.
+% Author and year are pulled from the .bib via natbib (no duplicated data);
+% the leading [n] links to the full entry in the bibliography, which carries
+% the complete details and the URL. Multi-key cites emit one note per key.
+\makeatletter
+% Per-key short title + venue. This is the only hand-maintained data; keep the
+% key set in sync with references.bib.
+\newcommand{\shortref}[2]{\expandafter\gdef\csname sr@#1\endcsname{#2}}
+\shortref{socher2013sst}      {Recursive Deep Models over a Sentiment Treebank, EMNLP}
+\shortref{wang2019glue}       {GLUE: A Multi-Task Benchmark for NLU, ICLR}
+\shortref{hendrycks2021mmlu}  {Measuring Massive Multitask Language Understanding, ICLR}
+\shortref{williams2018mnli}   {A Broad-Coverage Challenge Corpus for Sentence Understanding through Inference, NAACL}
+\shortref{mcnemar1947note}    {Sampling Error of the Difference Between Correlated Proportions, Psychometrika}
+\shortref{edwards1948note}    {Correction for Continuity in Correlated Proportions, Psychometrika}
+\shortref{efron1993bootstrap} {An Introduction to the Bootstrap, Chapman \& Hall}
+\shortref{koehn2004significance}{Statistical Significance Tests for MT Evaluation, EMNLP}
+\shortref{sporleder2009idiom} {Literal and Non-Literal Use of Idiomatic Expressions, EACL}
+\shortref{tayyar2021astitch}  {AStitchInLanguageModels: Idiomaticity in Pre-Trained LMs, Findings of EMNLP}
+\shortref{chakrabarty2022flute}{FLUTE: Figurative Language Understanding through Textual Explanations, EMNLP}
+\shortref{jia2017adversarial} {Adversarial Examples for Evaluating Reading Comprehension, EMNLP}
+\shortref{ribeiro2018semantically}{Semantically Equivalent Adversarial Rules for Debugging NLP Models, ACL}
+% Falls back to the bare citation if a key has no short form registered.
+\newcommand{\fn@short}[1]{%
+  \footnote{\citep{#1} \citeauthor{#1} (\citeyear{#1})%
+    \@ifundefined{sr@#1}{}{, \csname sr@#1\endcsname}.}}
+\newif\iffn@first
+% comma between consecutive markers, so a two-key cite reads "11,12" not "1112"
+\newcommand{\fn@sep}{\iffn@first\fn@firstfalse\else\textsuperscript{,}\fi}
+\newcommand{\footeach}[1]{%
+  \fn@firsttrue
+  \@for\@fnkey:=#1\do{\fn@sep\expandafter\fn@short\expandafter{\@fnkey}}}
+\makeatother
+\newcommand{\citetf}[1]{\citet{#1}\footeach{#1}}
+\newcommand{\citepf}[1]{\citep{#1}\footeach{#1}}
 
 \title{Does Idiomatic Phrasing Degrade LLM Task Performance? \\
 A Controlled Paraphrase-vs-Idiom Study Across Instruction-Tuned Decoder Models}
@@ -70,46 +119,43 @@ robustness-to-rewording work.
 
 \textbf{Contributions.} This project's main contributions are:
 \begin{enumerate}
-  \item A controlled, paired three-way variant design (original / paraphrase
-    / idiomatic) that isolates the idiom-specific effect from the generic
-    effect of rewording, via an explicit paraphrase control condition rather
-    than a bare before/after comparison.
-  \item A \emph{sole-cause} paired diagnostic that goes beyond simple
-    per-variant accuracy deltas: restricted to items a model already answers
-    correctly on the original text, it asks which single rewrite type
-    (idiomatic or paraphrase) is responsible when exactly one of the two
-    rewrites flips a previously-correct answer to incorrect. This directly
-    attributes degradation to a specific transformation instead of
-    conflating it with ordinary variance.
-  \item Dual statistical validation of every sole-cause result: a classical
-    paired McNemar significance test, cross-checked by an independent
-    non-parametric bootstrap confidence interval and empirical p-value, to
-    guard against the chi-square approximation being unreliable on the
-    comparatively small discordant-pair counts this diagnostic produces.
-  \item A broad empirical sweep across eleven diverse instruction-tuned
-    decoder LLMs, spanning roughly 0.5B--9B parameters across (at time of
-    writing) six-plus distinct model families, rather than a single-model
-    case study, together with a pooled cross-model significance test.
-  \item A fully reproducible, config-driven, four-stage pipeline (clean
-    $\rightarrow$ augment $\rightarrow$ evaluate $\rightarrow$ analyze), with
-    LLM-judge validation of every augmented example, on-disk response
-    caching, and provenance metadata recorded alongside every artifact (see
-    \S\ref{sec:methodology}).
+  \item \textbf{A paraphrase-controlled three-way design.} Each input is
+    rewritten into paired original / paraphrase / idiomatic variants, so the
+    paraphrase arm absorbs the generic cost of rewording and leaves the
+    idiom-specific effect isolated.
+  \item \textbf{A sole-cause diagnostic.} Restricted to items a model already
+    answers correctly, it identifies which single rewrite is responsible when
+    exactly one of the two flips the answer, attributing degradation to a
+    transformation rather than to ordinary variance.
+  \item \textbf{Dual significance testing.} Every sole-cause result is tested
+    with a continuity-corrected McNemar test and cross-checked against an
+    independent non-parametric bootstrap, guarding against the chi-square
+    approximation on small discordant-pair counts.
+  \item \textbf{Breadth across models and tasks.} Eleven instruction-tuned
+    decoder LLMs (roughly 0.5B--9B parameters, six model families) evaluated
+    on three datasets spanning sentiment, knowledge QA, and inference, with a
+    pooled cross-model test.
+  \item \textbf{A reproducible four-stage pipeline} (clean $\rightarrow$
+    augment $\rightarrow$ evaluate $\rightarrow$ analyze) with LLM-judge
+    validation of every augmented example and per-artifact provenance
+    (\S\ref{sec:methodology}).
 \end{enumerate}
 
 \subsection{Related Work}
 
 \textbf{Idiom processing in NLP.} Prior work on idiomatic language in NLP has
 mostly focused on \emph{detecting} or \emph{translating} idioms, rather than
-measuring their effect on downstream task accuracy. \citet{sporleder2009idiom}
+measuring their effect on downstream task accuracy. \citetf{sporleder2009idiom}
 study token-level classification of literal versus idiomatic usage of a given
-expression in context. \citet{tayyar2021astitch} probe pretrained language
+expression in context. \citetf{tayyar2021astitch} probe pretrained language
 models specifically on their ability to distinguish idiomatic from literal
-usage, finding that even large pretrained models struggle to generalize
-idiom comprehension beyond expressions seen during training.
-\citet{chakrabarty2022flute} introduce a benchmark (FLUTE) for figurative
-language understanding covering idioms, similes, and metaphors framed as
-natural language inference and explanation generation. These works establish
+usage, finding that such models detect idiomatic usage reasonably well when
+given one or a few in-context examples of an expression, but degrade
+substantially in the zero-shot setting on expressions unseen during
+training. \citetf{chakrabarty2022flute} introduce a benchmark (FLUTE, 9{,}000
+instances) for figurative language understanding covering idioms, similes,
+metaphors, and sarcasm, framed as natural language inference with
+explanation generation. These works establish
 that idiom \emph{comprehension} is a genuine weak point for language models,
 but do not isolate how much of an idiom's effect on a \emph{downstream task}
 (e.g. sentiment classification, multiple-choice QA) is attributable to
@@ -117,9 +163,9 @@ idiomaticity itself versus the generic effect of rewording a sentence.
 
 \textbf{Paraphrase and rewording robustness.} A separate line of work shows
 that models are sensitive to paraphrasing and adversarial rewording that
-preserves meaning: \citet{jia2017adversarial} show reading-comprehension
+preserves meaning: \citetf{jia2017adversarial} show reading-comprehension
 models can be fooled by distractor sentences that do not change the correct
-answer, and \citet{ribeiro2018semantically} show semantics-preserving
+answer, and \citetf{ribeiro2018semantically} show semantics-preserving
 rewrites (SEARs) can flip model predictions across several NLP tasks. This
 motivates why a bare original-vs-idiomatic comparison is confounded: any
 degradation observed could simply be this generic paraphrase-sensitivity
@@ -129,14 +175,18 @@ paraphrase-induced degradation via a paired three-way control design across
 a broad panel of contemporary open instruction-tuned decoder LLMs, which is
 the gap this project addresses.
 
-\textbf{Datasets and statistical methodology.} We build on two established
-benchmarks: SST-2 \citep{socher2013sst}, a binary sentiment classification
-dataset built from movie-review snippets, and MMLU \citep{hendrycks2021mmlu},
-a multi-domain multiple-choice knowledge benchmark. For paired significance
-testing on per-example correctness we use McNemar's test
-\citep{mcnemar1947note}, the standard approach for paired nominal
-before/after comparisons, cross-validated with non-parametric bootstrap
-resampling \citep{efron1993bootstrap}.
+\textbf{Datasets and statistical methodology.} We build on three established
+benchmarks: SST-2 \citepf{socher2013sst,wang2019glue}, a binary sentiment
+classification dataset built from movie-review snippets; MMLU
+\citepf{hendrycks2021mmlu}, a multi-domain multiple-choice knowledge
+benchmark; and MultiNLI \citepf{williams2018mnli}, a three-way natural
+language inference corpus of roughly 433k sentence pairs spanning ten written
+and spoken genres. For
+paired significance testing on per-example correctness we use
+McNemar's test \citepf{mcnemar1947note} with a continuity correction
+\citepf{edwards1948note}, the standard approach for paired nominal
+before/after comparisons, cross-validated with paired non-parametric
+bootstrap resampling \citepf{efron1993bootstrap,koehn2004significance}.
 
 \section{Methodology}
 \label{sec:methodology}
@@ -154,7 +204,7 @@ model/prompt version that produced it, for full provenance.
 \begin{figure}[t]
 \centering
 \begin{tikzpicture}[
-    scale=0.72, every node/.style={transform shape},
+    scale=0.88, every node/.style={transform shape},
     node distance=4mm and 5mm,
     stage/.style={rectangle, rounded corners, draw=blue!60!black, fill=blue!8,
       minimum width=6.6cm, minimum height=1.05cm, align=center, font=\footnotesize, inner sep=3pt},
@@ -170,7 +220,7 @@ model/prompt version that produced it, for full provenance.
   \node[stage, below=of orig]    (s2)   {\textbf{Stage 2: Augment}\\ paraphrase / idiomatic LLM rewrite $\cdot$ semantic / label / idiom validators};
   \node[artifact, below=of s2, xshift=-2.4cm] (para) {\texttt{paraphrase.csv}};
   \node[artifact, below=of s2, xshift=2.4cm]  (idio) {\texttt{idiomatic.csv}};
-  \node[stage, below=12mm of s2] (s3)   {\textbf{Stage 3: Evaluate}\\ identical prompt on every variant, predictions joined by id};
+  \node[stage, below=18mm of s2] (s3)   {\textbf{Stage 3: Evaluate}\\ identical prompt on every variant, predictions joined by id};
   \node[artifact, below=of s3]   (res)  {\texttt{results/\{dataset\}/\{model\}.json}};
   \node[stage, below=of res]     (s4)   {\textbf{Stage 4: Analyze}\\ accuracy deltas $\cdot$ sole-cause McNemar + bootstrap $\cdot$ pooled tests};
   \node[finalbox, below=of s4]   (rep)  {Report: tables \& figures};
@@ -180,11 +230,16 @@ model/prompt version that produced it, for full provenance.
   \draw[arrow] (orig) -- (s2);
   \draw[arrow] (s2)   -- (para);
   \draw[arrow] (s2)   -- (idio);
-  \draw[arrow] (para.south) |- (s3.west);
-  \draw[arrow] (idio.south) |- (s3.east);
-  \coordinate (bendA) at ($(orig.east)+(3.4,0)$);
-  \coordinate (bendB) at (bendA |- s3.north);
-  \draw[arrow] (orig.east) -- (bendA) -- (bendB) -- (s3.north);
+  % variants drop straight down onto the top edge of Stage 3
+  \draw[arrow] (para.south) -- (para.south |- s3.north);
+  \draw[arrow] (idio.south) -- (idio.south |- s3.north);
+  % original.csv bypasses Stage 2 down the right-hand side and enters Stage 3
+  % at its east edge; the bypass column sits clear of every box to its left
+  % bypass column: x taken from s2.east (the widest box, since its text exceeds
+  % the minimum width), y taken from orig so the first leg stays horizontal
+  \coordinate (bypassx) at ($(s2.east)+(0.6,0)$);
+  \coordinate (bypass)  at (bypassx |- orig.east);
+  \draw[arrow] (orig.east) -- (bypass) -- (bypass |- s3) -- (s3.east);
   \draw[arrow] (s3)   -- (res);
   \draw[arrow] (res)  -- (s4);
   \draw[arrow] (s4)   -- (rep);
@@ -217,7 +272,11 @@ through unchanged.
 \textbf{Stage 2: Augment.} Each cleaned row is rewritten by an external
 LLM (Google Gemini, selected via config; Anthropic Claude and OpenAI GPT are
 also supported behind the same client interface) into two variants using two
-distinct, fixed prompt templates:
+distinct, fixed prompt templates. Templates are selected per dataset, so a
+task whose input is not a free-standing sentence can use wording suited to it
+(MNLI, whose rewrite target is a premise judged against a fixed hypothesis,
+uses its own NLI-specific pair of templates) without perturbing the prompt
+hashes, and therefore the warm caches, of the other datasets:
 
 \begin{itemize}
   \item \emph{Paraphrase prompt}: instructs the augmenter to reword the
@@ -258,18 +317,54 @@ configuration.
 \subsection{Datasets}
 
 \begin{itemize}
-  \item \textbf{SST-2} \citep{socher2013sst}: binary sentiment
-    classification over short movie-review snippets; metric: accuracy.
-  \item \textbf{MMLU} \citep{hendrycks2021mmlu}: multiple-choice
+  \item \textbf{SST-2} \citepf{socher2013sst}: binary sentiment
+    classification over short movie-review snippets, in the GLUE split
+    \citepf{wang2019glue}; metric: accuracy.
+  \item \textbf{MMLU} \citepf{hendrycks2021mmlu}: multiple-choice
     multi-domain knowledge questions spanning 57 subjects; metric: accuracy.
+  \item \textbf{MNLI (MultiNLI)} \citepf{williams2018mnli}: three-way natural
+    language inference (\emph{entailment} / \emph{neutral} /
+    \emph{contradiction}) over premise--hypothesis pairs drawn from ten
+    written and spoken genres; metric: accuracy.
 \end{itemize}
 
-These two datasets were chosen to cover two qualitatively different task
-types under the same paraphrase/idiom protocol: short, informal,
-already-somewhat-figurative text (SST-2 movie-review snippets) versus
-longer, formal, fact-oriented multiple-choice questions (MMLU), to see
-whether an idiom-degradation effect (if present) generalizes across task
-style.
+These three datasets were chosen to cover qualitatively different task types
+under the same paraphrase/idiom protocol: short, informal,
+already-somewhat-figurative text (SST-2 movie-review snippets); longer,
+formal, fact-oriented multiple-choice questions (MMLU); and sentence-pair
+inference (MNLI), to see whether an idiom-degradation effect (if present)
+generalizes across task style. MNLI is the most direct test of the three: in
+sentiment classification or knowledge QA an idiom perturbs the surface form
+of an input whose answer is otherwise independent of it, whereas an
+entailment judgement turns on a literal reading of the premise itself, so
+idiomatic phrasing bears on the decision rather than merely on its wording.
+Its three-way label space also sets chance at 33\% rather than 50\%, which
+depresses the per-row rate of sole-cause events relative to a binary task.
+
+\textbf{MNLI-specific protocol.} Two aspects of the MNLI instantiation differ
+from the other two datasets and are worth stating explicitly, since both bear
+on the validity of the paired analysis in \S\ref{sec:stats}:
+
+\begin{itemize}
+  \item \textbf{Only the premise is rewritten.} The hypothesis is carried
+    through in metadata and stays byte-identical across the original,
+    paraphrase, and idiomatic variants, so the manipulation is confined to one
+    side of the pair and cannot alter the hypothesis it is judged against.
+  \item \textbf{One row per premise.} MNLI pairs roughly three hypotheses with
+    every premise; emitting all of them would place the same premise in the
+    dataset several times, violating the independence assumption underlying
+    the paired test. The loader therefore keeps only the first hypothesis per
+    premise.
+\end{itemize}
+
+Rows are drawn from the two validation splits combined (matched, 9{,}815
+pairs; mismatched, 9{,}832), rather than from the training split, and the
+test split is unusable here because its labels are withheld. Because the
+mismatched half contributes the five genres absent from training, each row's
+genre is recorded alongside it so that genre shift remains visible as a
+potential confound rather than being silently absorbed into the comparison.
+After first-hypothesis selection and cleaning, 5{,}127 premises survive to
+form the MNLI \texttt{original.csv}.
 
 \subsection{Evaluated models}
 
@@ -322,8 +417,8 @@ single rewrite type rather than to ordinary noise:
 
 The significance of the gap between $b$ and $c$ is assessed two ways:
 
-\textbf{McNemar's test} \citep{mcnemar1947note}, with Yates' continuity
-correction:
+\textbf{McNemar's test} \citepf{mcnemar1947note}, with the continuity
+correction of \citetf{edwards1948note}:
 \begin{equation}
   \chi^2 = \frac{(|b - c| - 1)^2}{b + c}, \qquad \mathrm{df} = 1,
 \end{equation}
@@ -333,7 +428,8 @@ rewrite broke it).
 
 \textbf{Non-parametric bootstrap check.} Because McNemar's test relies on a
 chi-square approximation that can be unreliable when $b + c$ is small, every
-result is cross-checked with a paired bootstrap \citep{efron1993bootstrap}:
+result is cross-checked with a paired bootstrap
+\citepf{efron1993bootstrap,koehn2004significance}:
 the aligned rows are resampled with replacement 10{,}000 times, the
 difference $b - c$ is recomputed on each resample, and a 95\% percentile
 confidence interval plus a two-sided empirical p-value are read off the
@@ -349,19 +445,6 @@ this pooling is not a rigorous mixed-effects test, since different models
 are not strictly exchangeable independent draws, and is reported as
 indicative rather than definitive.
 
-\subsection{Engineering and reproducibility}
-
-The project is implemented in Python, managed with \texttt{uv}, with strict
-typing enforced by \texttt{pyright} in strict mode and formatting/linting by
-\texttt{ruff}, both run as pre-commit hooks and in CI. Every stage is
-configured entirely through versioned YAML files (one per dataset/model
-combination as appropriate), and every produced artifact (cleaned CSV,
-augmented CSV, evaluation result, analysis table) is accompanied by a JSON
-sidecar recording the exact configuration hash, model/prompt versions, and
-row-level provenance (e.g. which rows were dropped by a validator and why)
-that produced it, so that any number reported in this project can be traced
-back to the exact configuration that generated it.
-
 \section{Experimental results}
 
 \textit{[To be completed once the full evaluation sweep and statistical
@@ -375,6 +458,6 @@ analysis are finalized.]}
 
 Code repository: \url{https://github.com/LihuZur/Idiom_degredation} % TODO: confirm final repo URL/visibility before submission
 
-\bibliographystyle{plainnat}
+\bibliographystyle{unsrtnat}
 \bibliography{references}
 \end{document}
