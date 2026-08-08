@@ -1,0 +1,2 @@
+observed_diff,ci_low,ci_high,p_value,n_boot
+3,-15.0,21.0,0.7862,10000

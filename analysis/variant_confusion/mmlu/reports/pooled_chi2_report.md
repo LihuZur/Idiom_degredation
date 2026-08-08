@@ -53,8 +53,25 @@ for paired 2x2 designs, especially with small counts.
 - chi2 = 7.084, df = 1
 - p-value = 0.00778
 
+## Non-parametric bootstrap check
+
+McNemar's test above relies on a chi-square approximation, which can be inaccurate when the
+discordant count (b + c) is small. As a robustness check, we instead **resample the aligned
+items with replacement** 10000 times (paired bootstrap — each resample redraws whole
+`(original, paraphrase, idiomatic)` rows, keeping the pairing intact), recomputing
+`idiomatic_only_wrong - paraphrase_only_wrong` on each resample. This builds an empirical
+sampling distribution with no assumption of normality/chi-square, from which we read off a 95%
+percentile confidence interval and a two-sided empirical p-value (the fraction of resamples
+landing on the opposite side of zero from the observed difference, doubled).
+
+- observed diff (b - c) = 75
+- 95% bootstrap CI = [21, 129]
+- bootstrap p-value = 0.00780 (n_boot=10000)
+
 ## Conclusion
 
 **Statistically significant at alpha=0.05** (p=0.00778 < 0.05): the **idiomatic** rewrite broke a previously-correct answer more often than the **paraphrase** rewrite did (b=424 vs c=349). This supports the research hypothesis that idiomatic phrasing degrades accuracy more than plain paraphrasing.
 
 **Pooling caveat:** this pooled test naively sums discordant-pair counts across multiple models. It is *not* a rigorous mixed-effects test (the models are not strictly exchangeable independent draws) — treat it as indicative, not definitive.
+
+The bootstrap check **agrees**: its 95% CI on (idiomatic_only minus paraphrase_only) is [21, 129], which excludes zero, and its empirical p-value (0.00780) is also below alpha=0.05.

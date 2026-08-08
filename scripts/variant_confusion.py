@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Any
 
 import click
+import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.colors import sample_colorscale
@@ -40,6 +41,7 @@ from analysis.io import write_markdown, write_sidecar, write_table
 
 VARIANTS: tuple[str, str, str] = ("original", "paraphrase", "idiomatic")
 ALPHA = 0.05  # significance threshold used in the written conclusions
+N_BOOT_DEFAULT = 10_000  # default number of bootstrap resamples
 
 
 def load_per_task(results_dir: Path, dataset: str, model_id: str) -> list[dict[str, Any]]:
@@ -150,6 +152,66 @@ def mcnemar(b: int, c: int) -> tuple[float, float]:
     return stat, p_value
 
 
+def bootstrap_diff_ci(
+    items: list[tuple[bool, bool, bool]],
+    *,
+    n_boot: int = N_BOOT_DEFAULT,
+    seed: int = 0,
+) -> tuple[int, float, float, float]:
+    """Non-parametric bootstrap CI/p-value for the sole-cause count difference.
+
+    Complements `mcnemar()` (which relies on a chi-square approximation) with
+    an empirical estimate that makes no distributional assumption: resamples
+    `items` (whole aligned rows, i.e. paired `(original, paraphrase,
+    idiomatic)` correctness triples) with replacement `n_boot` times, and for
+    each resample recomputes `idiomatic_only_wrong - paraphrase_only_wrong`.
+    The spread of that statistic across resamples approximates its true
+    sampling distribution.
+
+    Args:
+        items: The aligned `(original, paraphrase, idiomatic)` correctness
+            tuples to resample from (e.g. `list(aligned.values())`, or a
+            concatenation across models for a pooled bootstrap).
+        n_boot: Number of bootstrap resamples to draw.
+        seed: RNG seed, for reproducibility across runs.
+
+    Returns:
+        `(observed_diff, ci_low, ci_high, p_value)`:
+        - `observed_diff`: the actual `idiom_only_wrong - para_only_wrong` on `items`.
+        - `ci_low`/`ci_high`: the 2.5th/97.5th percentile of the bootstrap
+          distribution of that difference (a 95% percentile CI).
+        - `p_value`: a two-sided empirical p-value — twice the fraction of
+          resamples landing on the opposite side of zero from `observed_diff`
+          (capped at 1.0). `0.0` diff-and-p-value edge case: if `items` is
+          empty, returns `(0, 0.0, 0.0, 1.0)`.
+    """
+    n = len(items)
+    if n == 0:
+        return 0, 0.0, 0.0, 1.0
+
+    orig = np.array([o for o, _, _ in items], dtype=bool)
+    para = np.array([p for _, p, _ in items], dtype=bool)
+    idiom = np.array([i for _, _, i in items], dtype=bool)
+    sole_idiom_mask = orig & para & ~idiom
+    sole_para_mask = orig & ~para & idiom
+
+    observed = int(sole_idiom_mask.sum()) - int(sole_para_mask.sum())
+
+    rng = np.random.default_rng(seed)
+    idx = rng.integers(0, n, size=(n_boot, n))
+    boot_diffs = sole_idiom_mask[idx].sum(axis=1).astype(np.int64) - sole_para_mask[idx].sum(
+        axis=1
+    ).astype(np.int64)
+
+    ci_low = float(np.percentile(boot_diffs, 2.5))
+    ci_high = float(np.percentile(boot_diffs, 97.5))
+
+    opposite = int(np.sum(boot_diffs <= 0)) if observed >= 0 else int(np.sum(boot_diffs >= 0))
+    p_value = float(min(1.0, 2 * opposite / n_boot))
+
+    return observed, ci_low, ci_high, p_value
+
+
 def joint_counts(aligned: dict[str, tuple[bool, bool, bool]]) -> dict[tuple[bool, bool, bool], int]:
     """Count occurrences of each of the 8 (original, paraphrase, idiomatic) correctness combos."""
     combos: list[tuple[bool, bool, bool]] = [
@@ -205,6 +267,22 @@ def sole_cause_dataframe(sole_idiom: int, sole_para: int, sole_orig: int, n: int
         },
     ]
     return pd.DataFrame(rows, columns=["variant", "count", "pct"])
+
+
+def bootstrap_dataframe(
+    boot_diff: int, boot_ci_low: float, boot_ci_high: float, boot_p: float, n_boot: int
+) -> pd.DataFrame:
+    """Build the 1-row bootstrap CI/p-value summary table (companion to `sole_cause_dataframe`)."""
+    rows: list[dict[str, int | float]] = [
+        {
+            "observed_diff": boot_diff,
+            "ci_low": boot_ci_low,
+            "ci_high": boot_ci_high,
+            "p_value": boot_p,
+            "n_boot": n_boot,
+        }
+    ]
+    return pd.DataFrame(rows, columns=["observed_diff", "ci_low", "ci_high", "p_value", "n_boot"])
 
 
 def detail_dataframe(
@@ -287,9 +365,23 @@ def build_confusion_figure(label: str, df: pd.DataFrame) -> go.Figure:
 
 
 def build_sole_cause_figure(
-    label: str, sole_idiom: int, sole_para: int, sole_orig: int, stat: float, p_value: float
+    label: str,
+    sole_idiom: int,
+    sole_para: int,
+    sole_orig: int,
+    stat: float,
+    p_value: float,
+    *,
+    boot_ci_low: float | None = None,
+    boot_ci_high: float | None = None,
+    boot_p: float | None = None,
 ) -> go.Figure:
-    """Build a colored bar chart of sole-cause mistake counts, annotated with the McNemar result."""
+    """Build a colored bar chart of sole-cause mistake counts, annotated with the McNemar result.
+
+    If bootstrap results are supplied (`boot_ci_low`/`boot_ci_high`/`boot_p`), a
+    second subtitle line reports the bootstrap 95% CI and empirical p-value
+    alongside the McNemar chi2/p-value, without altering the McNemar line.
+    """
     categories = ["idiomatic-only-wrong", "paraphrase-only-wrong", "original-only-wrong"]
     values = [sole_idiom, sole_para, sole_orig]
     colors = ["#EF553B", "#636EFA", "#B6E880"]
@@ -305,12 +397,20 @@ def build_sole_cause_figure(
         ]
     )
     significance = "significant" if p_value < ALPHA else "not significant"
+    subtitle = (
+        f"<sup>McNemar (idiomatic-only vs paraphrase-only): "
+        f"chi2={stat:.3f}, p={p_value:.5f} ({significance} at alpha={ALPHA})"
+    )
+    if boot_ci_low is not None and boot_ci_high is not None and boot_p is not None:
+        boot_significance = "significant" if boot_p < ALPHA else "not significant"
+        subtitle += (
+            f"<br>Bootstrap 95% CI on (idiom_only - para_only): "
+            f"[{boot_ci_low:.0f}, {boot_ci_high:.0f}], p={boot_p:.5f} "
+            f"({boot_significance} at alpha={ALPHA})"
+        )
+    subtitle += "</sup>"
     fig.update_layout(
-        title=(
-            f"Sole-cause mistakes — {label}<br>"
-            f"<sup>McNemar (idiomatic-only vs paraphrase-only): "
-            f"chi2={stat:.3f}, p={p_value:.5f} ({significance} at alpha={ALPHA})</sup>"
-        ),
+        title=(f"Sole-cause mistakes — {label}<br>{subtitle}"),
         yaxis_title="count",
     )
     return fig
@@ -326,8 +426,17 @@ def render_chi2_report(
     p_value: float,
     *,
     pooled: bool,
+    boot_ci_low: float,
+    boot_ci_high: float,
+    boot_p: float,
+    n_boot: int,
 ) -> str:
-    """Render a full Markdown explanation of the McNemar test for one model (or pooled)."""
+    """Render a full Markdown explanation of the McNemar test for one model (or pooled).
+
+    Also includes a non-parametric bootstrap CI/p-value section (see
+    `bootstrap_diff_ci`) as a robustness check alongside the McNemar test, and
+    folds its verdict into the final Conclusion section.
+    """
     if sole_idiom > sole_para:
         direction = (
             f"the **idiomatic** rewrite broke a previously-correct answer more often than the "
@@ -366,6 +475,29 @@ def render_chi2_report(
             "multiple models. It is *not* a rigorous mixed-effects test (the models are not "
             "strictly exchangeable independent draws) — treat it as indicative, not definitive."
         )
+
+    boot_diff = sole_idiom - sole_para
+    boot_ci_includes_zero = boot_ci_low <= 0 <= boot_ci_high
+    if boot_p < ALPHA and not boot_ci_includes_zero:
+        boot_agreement = (
+            f"The bootstrap check **agrees**: its 95% CI on (idiomatic_only minus "
+            f"paraphrase_only) is [{boot_ci_low:.0f}, {boot_ci_high:.0f}], which excludes zero, "
+            f"and its empirical p-value ({boot_p:.5f}) is also below alpha={ALPHA}."
+        )
+    else:
+        disagree_note = (
+            "When the McNemar test and the bootstrap disagree on significance, prefer the "
+            "more conservative (non-significant) verdict, especially for small discordant counts."
+            if (p_value < ALPHA) != (boot_p < ALPHA)
+            else "This is broadly consistent with the McNemar result above."
+        )
+        boot_agreement = (
+            f"The bootstrap check is **more cautious**: its 95% CI on (idiomatic_only minus "
+            f"paraphrase_only) is [{boot_ci_low:.0f}, {boot_ci_high:.0f}] "
+            f"({'includes' if boot_ci_includes_zero else 'excludes'} zero), and its empirical "
+            f"p-value is {boot_p:.5f}. {disagree_note}"
+        )
+    conclusion += f"\n\n{boot_agreement}"
 
     return f"""# McNemar significance report — {label}
 
@@ -422,6 +554,21 @@ for paired 2x2 designs, especially with small counts.
 - chi2 = {stat:.3f}, df = 1
 - p-value = {p_value:.5f}
 
+## Non-parametric bootstrap check
+
+McNemar's test above relies on a chi-square approximation, which can be inaccurate when the
+discordant count (b + c) is small. As a robustness check, we instead **resample the aligned
+items with replacement** {n_boot} times (paired bootstrap — each resample redraws whole
+`(original, paraphrase, idiomatic)` rows, keeping the pairing intact), recomputing
+`idiomatic_only_wrong - paraphrase_only_wrong` on each resample. This builds an empirical
+sampling distribution with no assumption of normality/chi-square, from which we read off a 95%
+percentile confidence interval and a two-sided empirical p-value (the fraction of resamples
+landing on the opposite side of zero from the observed difference, doubled).
+
+- observed diff (b - c) = {boot_diff}
+- 95% bootstrap CI = [{boot_ci_low:.0f}, {boot_ci_high:.0f}]
+- bootstrap p-value = {boot_p:.5f} (n_boot={n_boot})
+
 ## Conclusion
 
 {conclusion}
@@ -434,22 +581,31 @@ def process_model(
     results_dir: Path,
     row_text: dict[tuple[str, str], dict[str, str]],
     dataset_out_dir: Path,
-) -> tuple[int, int, int, int]:
+    *,
+    n_boot: int,
+    boot_seed: int,
+) -> tuple[int, int, int, int, list[tuple[bool, bool, bool]]]:
     """Run the full per-model analysis and write its table/figure/report outputs.
 
     Returns:
-        `(n, sole_idiom_wrong, sole_para_wrong, sole_orig_wrong)`, for pooling by the caller.
+        `(n, sole_idiom_wrong, sole_para_wrong, sole_orig_wrong, aligned_items)` —
+        the last element (the raw aligned correctness tuples) is for the
+        caller to pool into a combined bootstrap across models.
     """
     per_task = load_per_task(results_dir, dataset, model_id)
     aligned = aligned_correctness(per_task)
     n = len(aligned)
     if n == 0:
         click.echo(f"{model_id}: no items with all 3 variants present - skipping")
-        return 0, 0, 0, 0
+        return 0, 0, 0, 0, []
 
     counts = joint_counts(aligned)
     sole_idiom, sole_para, sole_orig = sole_cause_counts(counts)
     stat, p_value = mcnemar(sole_idiom, sole_para)
+    aligned_items = list(aligned.values())
+    _, boot_ci_low, boot_ci_high, boot_p = bootstrap_diff_ci(
+        aligned_items, n_boot=n_boot, seed=boot_seed
+    )
     verdict = (
         "IDIOMATIC causes more sole mistakes"
         if sole_idiom > sole_para
@@ -459,7 +615,8 @@ def process_model(
     )
     click.echo(
         f"{model_id}: n={n} idiom_only={sole_idiom} para_only={sole_para} "
-        f"chi2={stat:.3f} p={p_value:.5f} -> {verdict}"
+        f"chi2={stat:.3f} p={p_value:.5f} boot_ci=[{boot_ci_low:.0f}, {boot_ci_high:.0f}] "
+        f"boot_p={boot_p:.5f} -> {verdict}"
     )
 
     tables_dir = dataset_out_dir / "tables"
@@ -474,23 +631,47 @@ def process_model(
     write_table(sole_df, tables_dir / f"{model_id}_sole_cause.csv")
     write_markdown(sole_df, tables_dir / f"{model_id}_sole_cause.md")
 
+    boot_diff = sole_idiom - sole_para
+    boot_df = bootstrap_dataframe(boot_diff, boot_ci_low, boot_ci_high, boot_p, n_boot)
+    write_table(boot_df, tables_dir / f"{model_id}_bootstrap.csv")
+    write_markdown(boot_df, tables_dir / f"{model_id}_bootstrap.md")
+
     write_table(detail_dataframe(aligned, row_text), tables_dir / f"{model_id}_detail.csv")
 
     figures_dir.mkdir(parents=True, exist_ok=True)
     build_confusion_figure(model_id, confusion_df).write_html(
         figures_dir / f"{model_id}_confusion.html"
     )
-    build_sole_cause_figure(model_id, sole_idiom, sole_para, sole_orig, stat, p_value).write_html(
-        figures_dir / f"{model_id}_sole_cause.html"
-    )
+    build_sole_cause_figure(
+        model_id,
+        sole_idiom,
+        sole_para,
+        sole_orig,
+        stat,
+        p_value,
+        boot_ci_low=boot_ci_low,
+        boot_ci_high=boot_ci_high,
+        boot_p=boot_p,
+    ).write_html(figures_dir / f"{model_id}_sole_cause.html")
 
     report = render_chi2_report(
-        model_id, n, sole_idiom, sole_para, sole_orig, stat, p_value, pooled=False
+        model_id,
+        n,
+        sole_idiom,
+        sole_para,
+        sole_orig,
+        stat,
+        p_value,
+        pooled=False,
+        boot_ci_low=boot_ci_low,
+        boot_ci_high=boot_ci_high,
+        boot_p=boot_p,
+        n_boot=n_boot,
     )
     reports_dir.mkdir(parents=True, exist_ok=True)
     (reports_dir / f"{model_id}_chi2_report.md").write_text(report, encoding="utf-8")
 
-    return n, sole_idiom, sole_para, sole_orig
+    return n, sole_idiom, sole_para, sole_orig, aligned_items
 
 
 def process_pooled(
@@ -499,10 +680,17 @@ def process_pooled(
     pooled_idiom: int,
     pooled_para: int,
     pooled_orig: int,
+    pooled_items: list[tuple[bool, bool, bool]],
     dataset_out_dir: Path,
+    *,
+    n_boot: int,
+    boot_seed: int,
 ) -> None:
     """Write the pooled-across-models sole-cause table/figure/report."""
     stat, p_value = mcnemar(pooled_idiom, pooled_para)
+    boot_diff, boot_ci_low, boot_ci_high, boot_p = bootstrap_diff_ci(
+        pooled_items, n_boot=n_boot, seed=boot_seed
+    )
     verdict = (
         "IDIOMATIC causes more sole mistakes overall"
         if pooled_idiom > pooled_para
@@ -512,7 +700,8 @@ def process_pooled(
     )
     click.echo(
         f"POOLED ({len(models)} models): n={pooled_n} idiom_only={pooled_idiom} "
-        f"para_only={pooled_para} chi2={stat:.3f} p={p_value:.5f} -> {verdict}"
+        f"para_only={pooled_para} chi2={stat:.3f} p={p_value:.5f} "
+        f"boot_ci=[{boot_ci_low:.0f}, {boot_ci_high:.0f}] boot_p={boot_p:.5f} -> {verdict}"
     )
 
     label = f"pooled ({len(models)} models)"
@@ -520,14 +709,37 @@ def process_pooled(
     write_table(sole_df, dataset_out_dir / "tables" / "pooled_sole_cause.csv")
     write_markdown(sole_df, dataset_out_dir / "tables" / "pooled_sole_cause.md")
 
+    boot_df = bootstrap_dataframe(boot_diff, boot_ci_low, boot_ci_high, boot_p, n_boot)
+    write_table(boot_df, dataset_out_dir / "tables" / "pooled_bootstrap.csv")
+    write_markdown(boot_df, dataset_out_dir / "tables" / "pooled_bootstrap.md")
+
     figures_dir = dataset_out_dir / "figures"
     figures_dir.mkdir(parents=True, exist_ok=True)
     build_sole_cause_figure(
-        label, pooled_idiom, pooled_para, pooled_orig, stat, p_value
+        label,
+        pooled_idiom,
+        pooled_para,
+        pooled_orig,
+        stat,
+        p_value,
+        boot_ci_low=boot_ci_low,
+        boot_ci_high=boot_ci_high,
+        boot_p=boot_p,
     ).write_html(figures_dir / "pooled_sole_cause.html")
 
     report = render_chi2_report(
-        label, pooled_n, pooled_idiom, pooled_para, pooled_orig, stat, p_value, pooled=True
+        label,
+        pooled_n,
+        pooled_idiom,
+        pooled_para,
+        pooled_orig,
+        stat,
+        p_value,
+        pooled=True,
+        boot_ci_low=boot_ci_low,
+        boot_ci_high=boot_ci_high,
+        boot_p=boot_p,
+        n_boot=n_boot,
     )
     reports_dir = dataset_out_dir / "reports"
     reports_dir.mkdir(parents=True, exist_ok=True)
@@ -542,6 +754,8 @@ def process_dataset(
     out_dir: Path,
     *,
     force: bool,
+    n_boot: int,
+    boot_seed: int,
 ) -> None:
     """Run the full per-model (+ pooled) analysis for one dataset and write all outputs."""
     dataset_out_dir = out_dir / dataset
@@ -554,17 +768,35 @@ def process_dataset(
     row_text = load_row_text(datasets_dir, dataset)
 
     pooled_n = pooled_idiom = pooled_para = pooled_orig = 0
+    pooled_items: list[tuple[bool, bool, bool]] = []
     for model_id in models:
-        n, sole_idiom, sole_para, sole_orig = process_model(
-            dataset, model_id, results_dir, row_text, dataset_out_dir
+        n, sole_idiom, sole_para, sole_orig, aligned_items = process_model(
+            dataset,
+            model_id,
+            results_dir,
+            row_text,
+            dataset_out_dir,
+            n_boot=n_boot,
+            boot_seed=boot_seed,
         )
         pooled_n += n
         pooled_idiom += sole_idiom
         pooled_para += sole_para
         pooled_orig += sole_orig
+        pooled_items.extend(aligned_items)
 
     if len(models) > 1:
-        process_pooled(models, pooled_n, pooled_idiom, pooled_para, pooled_orig, dataset_out_dir)
+        process_pooled(
+            models,
+            pooled_n,
+            pooled_idiom,
+            pooled_para,
+            pooled_orig,
+            pooled_items,
+            dataset_out_dir,
+            n_boot=n_boot,
+            boot_seed=boot_seed,
+        )
 
     write_sidecar(
         {"dataset": dataset, "models": list(models), "results_dir": str(results_dir)},
@@ -615,6 +847,20 @@ def process_dataset(
     default=False,
     help="Overwrite an existing dataset output folder instead of raising an error.",
 )
+@click.option(
+    "--n-boot",
+    type=int,
+    default=N_BOOT_DEFAULT,
+    show_default=True,
+    help="Number of bootstrap resamples for the non-parametric CI/p-value check.",
+)
+@click.option(
+    "--boot-seed",
+    type=int,
+    default=0,
+    show_default=True,
+    help="RNG seed for the bootstrap resampling, for reproducibility.",
+)
 def main(
     datasets: tuple[str, ...],
     models: tuple[str, ...],
@@ -622,10 +868,21 @@ def main(
     datasets_dir: Path,
     out_dir: Path,
     force: bool,
+    n_boot: int,
+    boot_seed: int,
 ) -> None:
     """Write per-variant confusion tables, colored figures, and McNemar reports for each dataset."""
     for dataset in datasets:
-        process_dataset(dataset, models, results_dir, datasets_dir, out_dir, force=force)
+        process_dataset(
+            dataset,
+            models,
+            results_dir,
+            datasets_dir,
+            out_dir,
+            force=force,
+            n_boot=n_boot,
+            boot_seed=boot_seed,
+        )
 
 
 if __name__ == "__main__":
