@@ -1,4 +1,4 @@
 variant,count,pct
-idiomatic_only_wrong,71,1.52885443583118
-paraphrase_only_wrong,83,1.7872523686477175
-original_only_wrong,46,0.9905254091300603
+idiomatic_only_wrong,480,2.818886539816772
+paraphrase_only_wrong,617,3.6234437397228096
+original_only_wrong,419,2.4606530420483907

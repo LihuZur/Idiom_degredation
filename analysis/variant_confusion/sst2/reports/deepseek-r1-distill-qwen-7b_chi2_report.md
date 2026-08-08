@@ -8,13 +8,13 @@ rewrite of that same item broke the answer, while the other rewrite did not:
 
 |                        | idiomatic WRONG | idiomatic right |
 |------------------------|------------------|------------------|
-| **paraphrase WRONG**   | (both broke it — excluded from the test) | c = 1 |
-| **paraphrase right**   | b = 0 | (both fine — excluded from the test) |
+| **paraphrase WRONG**   | (both broke it — excluded from the test) | c = 70 |
+| **paraphrase right**   | b = 83 | (both fine — excluded from the test) |
 
 Only the *discordant* cells (b, c) — where exactly one rewrite broke an otherwise-correct
 answer — enter McNemar's test. The concordant cells (both right / both wrong) carry no
 information about which rewrite is worse, so they are excluded, as in any paired McNemar test.
-For reference, `original_only_wrong` = 0 (cases where the original itself was wrong
+For reference, `original_only_wrong` = 79 (cases where the original itself was wrong
 but both rewrites were correct) is reported separately and does not enter this test.
 
 ## Test statistic
@@ -47,12 +47,12 @@ for paired 2x2 designs, especially with small counts.
 
 ## Result
 
-- b (idiomatic-only-wrong) = 0
-- c (paraphrase-only-wrong) = 1
-- n = b + c = 1
-- chi2 = 0.000, df = 1
-- p-value = 1.00000
+- b (idiomatic-only-wrong) = 83
+- c (paraphrase-only-wrong) = 70
+- n = b + c = 153
+- chi2 = 0.941, df = 1
+- p-value = 0.33198
 
 ## Conclusion
 
-**Not statistically significant at alpha=0.05** (p=1.00000 >= 0.05). Although the **paraphrase** rewrite broke a previously-correct answer more often than the **idiomatic** rewrite did (c=1 vs b=0), with only 1 discordant items this difference could plausibly be due to chance alone — no reliable conclusion should be drawn from this result in isolation.
+**Not statistically significant at alpha=0.05** (p=0.33198 >= 0.05). Although the **idiomatic** rewrite broke a previously-correct answer more often than the **paraphrase** rewrite did (b=83 vs c=70), with only 153 discordant items this difference could plausibly be due to chance alone — no reliable conclusion should be drawn from this result in isolation.

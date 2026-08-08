@@ -1,4 +1,4 @@
 variant,count,pct
-idiomatic_only_wrong,0,0.0
-paraphrase_only_wrong,1,0.06459948320413436
-original_only_wrong,0,0.0
+idiomatic_only_wrong,83,5.361757105943153
+paraphrase_only_wrong,70,4.521963824289406
+original_only_wrong,79,5.103359173126615
