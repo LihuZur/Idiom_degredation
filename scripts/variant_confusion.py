@@ -14,6 +14,9 @@ dataset writes a report folder containing:
   significance test comparing idiomatic-only-wrong vs paraphrase-only-wrong
   counts (contingency table, variance derivation, computed statistic, and a
   plain-language conclusion)
+- a paired, non-parametric bootstrap CI/p-value (see
+  ``bootstrap_diff_ci``) alongside every McNemar test, as a robustness
+  check that doesn't rely on the chi-square approximation
 - the same sole-cause table/chart/report pooled across all given models for
   that dataset (only when more than one model is given)
 
@@ -22,6 +25,16 @@ complete-triple invariant across an entire result file — it simply skips any
 ``per_task`` item missing a variant, since real Stage 2 runs drop a
 significant fraction of rows (validator rejections) for the paraphrase and
 idiomatic variants relative to original.
+
+See ``analysis/variant_confusion/METHODOLOGY.md`` for a full, presentation-
+ready explanation of every metric computed here (joint confusion matrix,
+sole-cause counts, McNemar test, and the bootstrap check), including a
+worked numeric example.
+
+MAINTENANCE: any change to the calculation logic in this module (a new
+statistic, a changed formula, different pooling behavior, etc.) must be
+mirrored in ``analysis/variant_confusion/METHODOLOGY.md`` in the same
+change — keep the two in sync.
 """
 
 import csv
