@@ -3,6 +3,16 @@ __pycache__/
 *.py[codz]
 *$py.class
 
+# LaTeX build artifacts (NLP_2024_Reichman report)
+NLP_2024_Reichman/*.aux
+NLP_2024_Reichman/*.bbl
+NLP_2024_Reichman/*.blg
+NLP_2024_Reichman/*.out
+NLP_2024_Reichman/*.toc
+NLP_2024_Reichman/*.fls
+NLP_2024_Reichman/*.fdb_latexmk
+NLP_2024_Reichman/*.synctex.gz
+
 # C extensions
 *.so
 
