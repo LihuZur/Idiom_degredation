@@ -30,8 +30,7 @@ effect of idiomatic phrasing from the baseline effect of rewording.
 
 ## 2. Scope
 
-- **Datasets**: 2 in the initial run (SST-2, MMLU); admin cap of 3 leaves
-  room for one more later.
+- **Datasets**: 3 — SST-2, MMLU, and MNLI. This fills the admin cap of 3.
 - **3 variants** per dataset: original / paraphrase / idiomatic.
 - **Active model track (this phase):**
   - **Decoder track** — instruction-tuned generative LLMs, zero/few-shot.
@@ -43,12 +42,68 @@ effect of idiomatic phrasing from the baseline effect of rewording.
 
 ## 3. Datasets
 
-Datasets selected for the initial run.
+| # | Dataset | Task | Metric (paper) | Rewritten text |
+|---|---------|------|----------------|----------------|
+| 1 | SST-2 (Stanford Sentiment Treebank) | Binary sentiment classification | Accuracy | the sentence |
+| 2 | MMLU (Massive Multitask Language Understanding) | Multi-choice knowledge QA | Accuracy | the question stem (`choices` untouched) |
+| 3 | MNLI (MultiNLI) | 3-way natural language inference | Accuracy | the **premise** (`hypothesis` untouched) |
 
-| # | Dataset | Task | Metric (paper) |
-|---|---------|------|----------------|
-| 1 | SST-2 (Stanford Sentiment Treebank) | Binary sentiment classification | Accuracy |
-| 2 | MMLU (Massive Multitask Language Understanding) | Multi-choice knowledge QA | Accuracy |
+MNLI was added last, and deliberately: on the other two datasets the surface
+manipulation is weakly coupled to the decision. Sentiment survives rewording
+(English idioms are overwhelmingly evaluative, so idiomatizing a review can even
+*sharpen* the signal), and an MMLU answer still hinges on knowledge sitting in
+the untouched `choices`. An entailment label, by contrast, turns on a *literal*
+reading of the premise, so a figurative surface forces a resolution step that can
+fail — the failure mode documented in IMPLI (Stowe et al., ACL 2022) and
+Figurative-NLI.
+
+**MNLI specifics.** Source is `nyu-mll/multi_nli`, both validation splits
+(`validation_matched` + `validation_mismatched`, 19,647 pairs), keeping the
+native 3-way label space (`entailment` / `neutral` / `contradiction`; chance is
+33%). MNLI pairs roughly three hypotheses with each premise; the loader emits
+**one row per premise** — the first pair per `promptID` — so no premise appears
+twice and Stage 4's paired test keeps its independence assumption. Example `id`
+is the source `pairID`.
+
+### 3.1 Built dataset sizes
+
+Rows surviving to the aligned variant triple, per dataset:
+
+| Dataset | Stage 1 written | Aligned triple | Retention |
+|---------|-----------------|----------------|-----------|
+| SST-2 | 2000 | 1548 | 77.4% |
+| MMLU | 1107 | 1085 | 98.0% |
+| MNLI | 5127 | **4709** | **91.8%** |
+
+MNLI's funnel: 19,647 pairs → 6,661 after one-row-per-premise selection → 5,127
+after the 10/100-token length filter → 4,709 aligned. Label balance in the final
+set is 1,693 entailment / 1,401 neutral / 1,615 contradiction, across all 10
+genres.
+
+The three retention figures differ for a reason that is itself informative.
+SST-2's movie-review text is idiom-dense, so `idiom_absence` rejects ~22% of
+attempted paraphrases; MMLU's academic phrasing almost never contains idioms, so
+nearly everything survives. MNLI sits between them, and its dominant failure is
+the *other* gate: 2.0% of premises could not be de-idiomatized, while 6.2% could
+not have a natural idiom inserted while preserving the entailment relation.
+
+> **Known limitation — genre confound.** `validation_mismatched` contributes five
+> genres held out of MNLI's training data, so the merged set mixes in-domain and
+> out-of-domain text. The length filter also prunes unevenly across genres —
+> measured retention ranged from 50% (fiction) to 89% (oup), since short
+> spoken/fiction premises are cut hardest by the 10-token floor. `meta.genre` is
+> recorded on every row so this can be checked, but genre-stratified analysis is
+> not in scope.
+
+> **Known limitation — MNLI uses a different augmenter.** SST-2 and MMLU were
+> built with `gemini-3.6-flash`; MNLI uses `gemini-3.5-flash-lite`. MNLI is the
+> only uncapped dataset (~5.1k rows × 6 calls vs MMLU's 1.1k), so Stage 2 runtime
+> mattered here and nowhere else. On a 100-row gate flash-lite was faster per call
+> and produced *deeper* rewrites — median token-overlap with the original of 0.414
+> vs 0.571 — at a lower validation-failure rate. Rebuilding the other two datasets
+> on it would have invalidated their warm caches for no research benefit. The
+> asymmetry is nonetheless real: cross-dataset comparisons carry an augmenter
+> difference as well as a task difference.
 
 ## 4. Models
 
@@ -181,7 +236,9 @@ is re-runnable independently of the earlier stages.
 ## 6. Metrics
 
 - Each dataset uses the metric defined in its original paper (accuracy for
-  SST-2 and MMLU).
+  SST-2, MMLU, and MNLI — for MNLI this is 3-way accuracy over
+  `entailment`/`neutral`/`contradiction`, so the chance floor is 33% rather
+  than SST-2's 50%).
 - Cross-variant reporting: Δ<sub>paraphrase</sub>, Δ<sub>idiom</sub>.
 - **Significance**: delta confidence intervals from a paired bootstrap over
   examples, and delta p-values from McNemar's exact test (`scipy`) on the
@@ -336,11 +393,16 @@ so each stage runs as a short `uv run idiom-<stage>` console command.
 # Stage 1 — Clean a raw dataset into an aligned CSV of task rows
 uv run idiom-clean --config configs/clean/sst2.yaml
 # → datasets_out/sst2_original.csv
+# Same shape for the other two: configs/clean/{mmlu,mnli}.yaml
 
 # Stage 2 — Given a config (dataset, augmenter id, prompts, validators), produce both variants
 uv run idiom-augment --config configs/augment/sst2.yaml
 # → datasets_out/sst2/paraphrase.csv, datasets_out/sst2/idiomatic.csv
 #   (+ paraphrase.meta.json / idiomatic.meta.json sidecars)
+# Requires the provider key in the env, e.g. `export GEMINI_API_KEY=...`
+# (GOOGLE_API_KEY is not read). MNLI is uncapped, so read
+# datasets_out/mnli/original.meta.json `row_counts.written` first — Stage 2
+# makes about 6 calls per row (1 rewrite + 2 judges, per variant).
 
 # Or run every registered dataset in one pass (requires configs/augment/{dataset}.yaml for each)
 uv run idiom-augment --all
@@ -428,7 +490,29 @@ stay consistent when we come back to them:
   classifiers. All training / fine-tuning code, configs, scripts, and
   checkpoints are deferred. Sub-decision when picked up: fine-tuning scope
   (original-only vs. also on paraphrase / idiomatic training data).
-- **Third dataset** — one additional dataset may be added later, up to the
-  admin cap of 3.
+- ~~**Third dataset** — one additional dataset may be added later, up to the
+  admin cap of 3.~~ **Resolved:** MNLI (§3) fills the third and final slot.
+- **Genre-stratified MNLI analysis** — `meta.genre` is recorded on every MNLI
+  row, but breaking the deltas down by genre (matched vs. mismatched) is
+  deferred.
+- **A real semantic-similarity gate** — `semantic_similarity` is still an
+  always-pass stub, so each variant has two effective validators, not three.
+  It would be worth most on MNLI, where a rewrite that shifts meaning changes
+  the entailment relation outright; enabling it needs an embedding-model
+  decision.
+- **Splitting the Stage 2 judge onto a stronger model** — one client currently
+  both writes the rewrite and grades whether it preserved the label.
+- **Transient API failures are misrecorded as validation failures** — a row whose
+  every retry died on a 5xx/429 is written to the durable `{variant}.skipped.json`
+  manifest as `validation_failed`, which resume consults specifically so it is
+  never retried. Nothing was judged and rejected; the calls never completed. Each
+  such row also costs its partner in the other variant, since reconciliation drops
+  the id from both. Three rows hit this during the MNLI run (504 / 503 / 429) and
+  were recovered by hand; the classification itself is unfixed. Stage 2 should
+  distinguish "no verdict" from "failed the verdict".
+- **Paraphrase no-ops** — 40 of 4,709 MNLI paraphrase rows (0.85%) are
+  byte-identical to their original premise, so they contribute nothing as a
+  control. The `idiom_absence` judge passes them because a literal sentence
+  trivially contains no idioms. A minimum-edit-distance check would catch them.
 - **PNG export for figures (kaleido)** — Stage 4 figures are HTML-only for
   this phase; static `.png` export via `plotly` + `kaleido` is deferred.

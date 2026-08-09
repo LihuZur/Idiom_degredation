@@ -1,0 +1,20 @@
+dataset: mnli
+seed: 0
+
+hf_revision: da70db2af9d09693783c3320c4249840212ee221
+
+length:
+  min_tokens: 10
+  max_tokens: 100
+
+# D6: uncapped. MNLI is the only dataset where the manipulation acts directly on
+# the decision (entailment turns on a literal reading of the premise), so the
+# run is deliberately not row-limited.
+max_rows: null
+
+normalize:
+  - nfc
+  - collapse_whitespace
+
+# Effectively premise-level: `data/mnli.py` already emits one row per promptID.
+dedupe: true

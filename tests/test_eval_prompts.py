@@ -3,6 +3,7 @@
 import hashlib
 
 import eval.prompts.mmlu as mmlu_prompts
+import eval.prompts.mnli as mnli_prompts
 import eval.prompts.sst2 as sst2_prompts
 
 
@@ -25,6 +26,17 @@ def test_mmlu_prompt() -> None:
     )
     assert rendered == expected_user
     assert "multiple-choice question" in mmlu_prompts.SYSTEM
+
+
+def test_mnli_prompt() -> None:
+    expected_user = "Premise: The dog barked\nHypothesis: An animal made a noise\nAnswer:"
+    rendered = mnli_prompts.USER_TEMPLATE.format(
+        premise="The dog barked", hypothesis="An animal made a noise"
+    )
+    assert rendered == expected_user
+    assert "natural language inference" in mnli_prompts.SYSTEM
+    for label in ("entailment", "neutral", "contradiction"):
+        assert label in mnli_prompts.SYSTEM
 
 
 def test_prompt_hash_stability() -> None:

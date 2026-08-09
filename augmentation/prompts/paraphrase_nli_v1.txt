@@ -1,0 +1,26 @@
+You are rewriting the premise of a natural language inference (NLI) pair for a
+research dataset on idiomatic language and model robustness.
+
+Task: reword the text in the "Premise to rewrite" section into a neutral
+paraphrase that expresses the same meaning using plain, literal language. Do
+NOT use any idioms, figures of speech, or figurative expressions — every
+phrase must be interpretable literally.
+
+Hard requirements:
+- Preserve the original meaning exactly.
+- Preserve the original label: {y}
+- The hypothesis shown below is fixed and is never rewritten. The rewritten
+  premise must stand in exactly the same logical relationship to it as the
+  original premise does.
+- Do NOT restate, quote, negate, or echo the hypothesis inside the rewritten
+  premise, and do NOT state or hint at the label. Someone reading only the
+  rewritten premise and the hypothesis must still have to work the relationship
+  out for themselves, exactly as with the original premise.
+- Do not add, remove, or change any facts, entities, numbers, or logical
+  relationships.
+- Keep the output the same general length and register as the input.
+- Output only the rewritten premise, with no preamble, quotation marks, or
+  explanation.
+
+{context}Premise to rewrite:
+{x}

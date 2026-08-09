@@ -1,0 +1,45 @@
+# Stage 2 (augmentation) config for mnli. See configs/augment/example.yaml
+# for the full annotated schema.
+
+dataset: mnli
+seed: 0
+
+augmenter: gemini
+# 3x faster per call than gemini-3.6-flash at comparable rewrite quality
+# (measured on a 20-row smoke test: 3.9s vs 11.8s per row-variant). MNLI is the
+# only uncapped dataset, so the speed matters here and nowhere else — sst2/mmlu
+# stay on gemini-3.6-flash, whose warm caches and prompt hashes are unaffected.
+augmenter_model: gemini-3.5-flash-lite
+
+decoding:
+  temperature: 0.7
+  max_output_tokens: 1536
+
+judge:
+  temperature: 0.0
+  max_output_tokens: 512
+
+retry:
+  max_attempts: 3
+  backoff_seconds: 2.0
+
+# D5: NLI-specific templates. The shared *_v1.txt files stay untouched so
+# MMLU/SST-2 prompt hashes — and their warm augment caches — are unaffected.
+prompts:
+  paraphrase: paraphrase_nli_v1.txt
+  idiomatic:  idiomatic_nli_v1.txt
+
+validators:
+  semantic_similarity:
+    embedding_model: null
+    min_cosine: 0.80
+  label_preservation:
+    method: llm_judge
+  idiom_presence:
+    method: llm_judge
+  idiom_absence:
+    method: llm_judge
+
+cache:
+  enabled: true
+  dir: .hf_cache/augment

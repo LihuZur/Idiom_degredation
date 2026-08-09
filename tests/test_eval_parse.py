@@ -1,10 +1,11 @@
-"""Unit tests for SST-2 and MMLU parsed outputs (STAGE3_PLAN §5.3)."""
+"""Unit tests for SST-2, MMLU and MNLI parsed outputs (STAGE3_PLAN §5.3)."""
 
 from typing import Any
 
 from augmentation.base import AugmentedRow
 from eval.config import EvalConfig
 from eval.mmlu import MmluEvaluator
+from eval.mnli import MnliEvaluator
 from eval.sst2 import Sst2Evaluator
 
 
@@ -78,6 +79,68 @@ def test_mmlu_parser() -> None:
     # first-occurrence-in-full-text behavior for non-reasoning models (unreliable,
     # but this model isn't registered as a reasoning model so nothing changes)
     assert evaluator.parse("<think>Option A is discussed here", ex) == ("0", "ok")
+
+
+def test_mnli_parser() -> None:
+    cfg = EvalConfig(model="dummy-model")
+    evaluator = MnliEvaluator(cfg=cfg)
+    ex = make_dummy_ex()
+
+    # parse returns "0", "1", "2" for entailment, neutral, contradiction
+    assert evaluator.parse("entailment", ex) == ("0", "ok")
+    assert evaluator.parse(" NEUTRAL.\n", ex) == ("1", "ok")
+    assert evaluator.parse("The answer is contradiction.", ex) == ("2", "ok")
+
+    # unparseable cases
+    assert evaluator.parse("entail", ex) == (None, "unparseable")
+    assert evaluator.parse("", ex) == (None, "unparseable")
+    assert evaluator.parse("unknown output", ex) == (None, "unparseable")
+
+    # R10: several label words in one answer resolve by earliest occurrence,
+    # in every ordering (an explicit index scan, not a pairwise compare).
+    assert evaluator.parse("neutral, not contradiction", ex) == ("1", "ok")
+    assert evaluator.parse("contradiction rather than neutral", ex) == ("2", "ok")
+    assert evaluator.parse("entailment, neutral, contradiction", ex) == ("0", "ok")
+    assert evaluator.parse("contradiction or entailment", ex) == ("2", "ok")
+
+    # reasoning-model <think> trace: names every label while reasoning, only the
+    # text after </think> should decide the answer
+    assert evaluator.parse(
+        "<think>entailment? no — maybe neutral</think>\nThe answer is contradiction.", ex
+    ) == ("2", "ok")
+
+
+def test_mnli_parser_reasoning_model_truncation() -> None:
+    cfg = EvalConfig(model="deepseek-r1-distill-qwen-7b")
+    evaluator = MnliEvaluator(cfg=cfg)
+    ex = make_dummy_ex()
+
+    # closed </think> block: parse the final answer as usual
+    assert evaluator.parse("<think>entailment looks wrong</think>\nThe answer is neutral.", ex) == (
+        "1",
+        "ok",
+    )
+
+    # no closing </think>: the model never stated a final answer, so "entailment"
+    # appearing inside the incomplete trace must not be parsed as the answer
+    assert evaluator.parse("<think>entailment seems likely", ex) == (None, "unparseable")
+    assert evaluator.parse("", ex) == (None, "unparseable")
+
+
+def test_mnli_format_includes_premise_and_hypothesis() -> None:
+    cfg = EvalConfig(model="dummy-model")
+    evaluator = MnliEvaluator(cfg=cfg)
+    ex = make_dummy_ex(
+        x="The new rights are nice enough",
+        y=1,
+        meta={"hypothesis": "Everyone really likes the newest benefits"},
+    )
+
+    formatted = evaluator.format(ex)
+    user = formatted.meta["messages"][1]["content"]
+
+    assert "The new rights are nice enough" in user
+    assert "Everyone really likes the newest benefits" in user
 
 
 def test_mmlu_parser_reasoning_model_truncation() -> None:

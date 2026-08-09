@@ -21,7 +21,7 @@ cross-run step that aggregates results and produces tables and figures.
   "flowchart": { "nodeSpacing": 60, "rankSpacing": 70, "htmlLabels": true, "useMaxWidth": true }
 }}%%
 flowchart TB
-    A["Raw HF datasets<br/>SST-2 · MMLU"]
+    A["Raw HF datasets<br/>SST-2 · MMLU · MNLI"]
     C["Stage 1 — Cleaning<br/>filter · normalize · dedupe"]
     Do[("original.csv")]
     B["Stage 2 — Augmentation<br/>cleaned CSV + augmenter"]
@@ -65,9 +65,15 @@ Key points:
 
 **Responsibilities**
 
-- Load raw datasets from Hugging Face (`sst2`, `mmlu`).
+- Load raw datasets from Hugging Face (`sst2`, `mmlu`, `mnli`).
 - Normalize into a shared in-memory schema (`DatasetRow` = `id`, `x`, `y`,
   `meta`).
+- For sentence-pair tasks, put the rewritten side in `x` and the fixed side in
+  `meta`: only `x` is rewritten downstream, so MNLI's `hypothesis` lives in
+  `meta` and stays byte-identical across the variant triple. `meta` reaches a
+  prompt only through `augmentation/prompts/loader.py:render_context`, which is
+  allowlist-based — anything not named there (e.g. MMLU `answer_index`, MNLI
+  `prompt_id`/`genre`) can never leak into a prompt.
 - Provide deterministic loading and caching.
 - Expose each dataset through a **registry** so new datasets can be added
   without touching any other module.
@@ -153,11 +159,29 @@ class Cleaner(Protocol):
     always passes for now*;
   - **Label preservation** check (LLM judge);
   - **Idiom presence / absence** check for the correct variant (LLM judge).
-- **Failure policy:** a failing, empty, or refused row triggers up to N
-  retries (default 3, exponential backoff); if it still fails, the pipeline
-  **stops that variant gracefully** — the rows already written are kept and the
-  run stops before starting later variants. No partial/bad row is ever written,
-  so row alignment across variants is preserved.
+- **Failure policy:** a failing, empty, or refused row triggers up to N retries
+  (default 3, exponential backoff). What happens next depends on *why* it failed:
+  - **Validation failure** (judges reject every attempt — e.g. a premise that is
+    already idiomatic, so no idiom-free paraphrase exists) → the row is
+    **skipped**, recorded in a durable `{variant}.skipped.json` manifest, and the
+    run continues. Resume consults that manifest specifically so skipped rows are
+    not retried.
+  - **Empty output** for a specific row (safety filter, or thinking consuming the
+    token budget) → also a skip, since it is row-specific rather than systemic.
+  - **Transient API error** (429, 5xx, timeout) → the run **pauses**; partial CSVs
+    are kept and nothing is recorded as skipped. Re-run to resume once it clears.
+  - After both variants build, the CSVs are **reconciled to their common id set**;
+    rows dropped for alignment are recorded with `reason="unaligned"`. A row lost
+    in one variant therefore costs its partner in the other.
+
+  No partial or unvalidated row is ever written, so alignment holds by
+  construction — rows are processed in input order and reconciliation only drops,
+  never reorders.
+
+  > **Known defect.** A row whose retries are *exhausted* by transient errors is
+  > recorded as `validation_failed` rather than pausing, so it enters the durable
+  > skip manifest and is never retried. Nothing was judged and rejected — the
+  > calls never completed. See README §13.
 - **Streaming + resumable output:** accepted rows are appended to each variant
   CSV and flushed as they are produced (bounded memory), and a variant's
   sidecar is written only once it completes. An interrupted run (crash, kill,
@@ -275,8 +299,10 @@ class Model(Protocol):
   the three CSVs `datasets_out/{dataset}/{original,paraphrase,idiomatic}.csv`
   and run inference on all three with the **same** dataset-specific prompt
   and instructions — only `x` changes between the three runs.
-- One prompt formatter per dataset (SST-2, MMLU); same formatter is applied
-  to all three variants of that dataset.
+- One prompt formatter per dataset (SST-2, MMLU, MNLI); same formatter is
+  applied to all three variants of that dataset. Formatters may read the
+  fixed side of a pair out of `meta` (MNLI's `hypothesis`), which is identical
+  across variants — so `x` really is the only thing that changes.
 - Metric functions matching each dataset's original paper.
 - Batched evaluation loop that yields per-example predictions and per-run
   aggregate metrics.
