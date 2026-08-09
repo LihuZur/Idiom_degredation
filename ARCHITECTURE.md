@@ -159,11 +159,29 @@ class Cleaner(Protocol):
     always passes for now*;
   - **Label preservation** check (LLM judge);
   - **Idiom presence / absence** check for the correct variant (LLM judge).
-- **Failure policy:** a failing, empty, or refused row triggers up to N
-  retries (default 3, exponential backoff); if it still fails, the pipeline
-  **stops that variant gracefully** — the rows already written are kept and the
-  run stops before starting later variants. No partial/bad row is ever written,
-  so row alignment across variants is preserved.
+- **Failure policy:** a failing, empty, or refused row triggers up to N retries
+  (default 3, exponential backoff). What happens next depends on *why* it failed:
+  - **Validation failure** (judges reject every attempt — e.g. a premise that is
+    already idiomatic, so no idiom-free paraphrase exists) → the row is
+    **skipped**, recorded in a durable `{variant}.skipped.json` manifest, and the
+    run continues. Resume consults that manifest specifically so skipped rows are
+    not retried.
+  - **Empty output** for a specific row (safety filter, or thinking consuming the
+    token budget) → also a skip, since it is row-specific rather than systemic.
+  - **Transient API error** (429, 5xx, timeout) → the run **pauses**; partial CSVs
+    are kept and nothing is recorded as skipped. Re-run to resume once it clears.
+  - After both variants build, the CSVs are **reconciled to their common id set**;
+    rows dropped for alignment are recorded with `reason="unaligned"`. A row lost
+    in one variant therefore costs its partner in the other.
+
+  No partial or unvalidated row is ever written, so alignment holds by
+  construction — rows are processed in input order and reconciliation only drops,
+  never reorders.
+
+  > **Known defect.** A row whose retries are *exhausted* by transient errors is
+  > recorded as `validation_failed` rather than pausing, so it enters the durable
+  > skip manifest and is never retried. Nothing was judged and rejected — the
+  > calls never completed. See README §13.
 - **Streaming + resumable output:** accepted rows are appended to each variant
   CSV and flushed as they are produced (bounded memory), and a variant's
   sidecar is written only once it completes. An interrupted run (crash, kill,
