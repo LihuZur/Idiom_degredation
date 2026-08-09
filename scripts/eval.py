@@ -353,7 +353,9 @@ def _build_per_task(
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
     help="Path to the per-model YAML config.",
 )
-@click.option("--dataset", required=True, type=str, help="Registered dataset name (sst2, mmlu).")
+@click.option(
+    "--dataset", required=True, type=str, help="Registered dataset name (sst2, mmlu, mnli)."
+)
 @click.option(
     "--variants",
     default=None,

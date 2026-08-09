@@ -62,7 +62,7 @@ def load_per_task(results_dir: Path, dataset: str, model_id: str) -> list[dict[s
 
     Args:
         results_dir: Root directory containing `{dataset}/{model}.json` files.
-        dataset: Dataset name (e.g. "sst2", "mmlu").
+        dataset: Dataset name (e.g. "sst2", "mmlu", "mnli").
         model_id: Model id, matching the result file's stem.
 
     Returns:
@@ -111,7 +111,7 @@ def load_row_text(datasets_dir: Path, dataset: str) -> dict[tuple[str, str], dic
 
     Args:
         datasets_dir: Root directory containing `{dataset}/{variant}.csv` files.
-        dataset: Dataset name (e.g. "sst2", "mmlu").
+        dataset: Dataset name (e.g. "sst2", "mmlu", "mnli").
 
     Returns:
         A mapping from `(task id, variant name)` to that CSV row as a dict.
@@ -824,7 +824,7 @@ def process_dataset(
     "datasets",
     required=True,
     multiple=True,
-    help="Registered dataset name (repeat --dataset for multiple, e.g. sst2, mmlu).",
+    help="Registered dataset name (repeat --dataset for multiple, e.g. sst2, mmlu, mnli).",
 )
 @click.option(
     "--model",
