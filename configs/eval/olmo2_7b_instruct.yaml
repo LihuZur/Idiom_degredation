@@ -1,0 +1,10 @@
+# Configuration for AllenAI OLMo 2 7B Instruct model
+model: olmo-2-7b-instruct
+seed: 0
+precision: bf16
+decoding:
+  temperature: 0.0
+  max_new_tokens: 32
+  do_sample: false
+batch:
+  size: 8

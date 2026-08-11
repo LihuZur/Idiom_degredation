@@ -1,0 +1,10 @@
+# Configuration for 01-AI Yi 1.5 6B Chat model
+model: yi-1.5-6b-chat
+seed: 0
+precision: bf16
+decoding:
+  temperature: 0.0
+  max_new_tokens: 32
+  do_sample: false
+batch:
+  size: 8

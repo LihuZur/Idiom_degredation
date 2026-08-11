@@ -1,0 +1,10 @@
+# Configuration for H2O.ai Danube3 4B Chat model
+model: h2o-danube3-4b-chat
+seed: 0
+precision: bf16
+decoding:
+  temperature: 0.0
+  max_new_tokens: 32
+  do_sample: false
+batch:
+  size: 8
