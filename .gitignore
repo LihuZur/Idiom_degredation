@@ -226,7 +226,6 @@ local/
 
 # Pipeline outputs (Stage 1/2 CSVs, Stage 3 result JSONs, analysis artifacts)
 datasets_out/
-results/
 analysis/figures/
 analysis/tables/
 

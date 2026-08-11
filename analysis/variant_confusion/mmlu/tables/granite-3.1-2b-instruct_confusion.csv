@@ -1,0 +1,9 @@
+original,paraphrase,idiomatic,count,pct
+True,True,True,513,47.28110599078341
+False,False,False,391,36.036866359447004
+True,False,True,45,4.147465437788019
+False,False,True,40,3.686635944700461
+False,True,False,34,3.133640552995392
+True,True,False,28,2.5806451612903225
+True,False,False,17,1.566820276497696
+False,True,True,17,1.566820276497696

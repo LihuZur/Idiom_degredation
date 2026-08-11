@@ -1,0 +1,4 @@
+variant,count,pct
+idiomatic_only_wrong,41,3.7788018433179724
+paraphrase_only_wrong,21,1.935483870967742
+original_only_wrong,16,1.4746543778801844
