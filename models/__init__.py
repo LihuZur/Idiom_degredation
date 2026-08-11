@@ -10,16 +10,25 @@ from models import (
     deepseek_r1_distill_qwen_7b as deepseek_r1_distill_qwen_7b,
 )
 from models import (
+    falcon3_3b_instruct as falcon3_3b_instruct,
+)
+from models import (
     gemma4_2b_instruct as gemma4_2b_instruct,
 )
 from models import (
     gemma4_9b_instruct as gemma4_9b_instruct,
 )
 from models import (
+    granite3p1_2b_instruct as granite3p1_2b_instruct,
+)
+from models import (
     llama3p2_1b_instruct as llama3p2_1b_instruct,
 )
 from models import (
     mistral7b_instruct_v03 as mistral7b_instruct_v03,
+)
+from models import (
+    olmo2_1b_instruct as olmo2_1b_instruct,
 )
 from models import (
     phi4_mini_instruct as phi4_mini_instruct,

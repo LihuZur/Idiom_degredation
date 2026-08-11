@@ -1,0 +1,10 @@
+# Configuration for IBM Granite 3.1 2B Instruct model
+model: granite-3.1-2b-instruct
+seed: 0
+precision: bf16
+decoding:
+  temperature: 0.0
+  max_new_tokens: 32
+  do_sample: false
+batch:
+  size: 8
