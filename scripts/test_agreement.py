@@ -13,7 +13,7 @@ import click
 import pandas as pd
 from scipy.stats import chi2
 
-from scripts.gen_report_tables import ALPHA, DATASETS, DS_LABEL, DISPLAY
+from scripts.gen_report_tables import ALPHA, DATASETS, DISPLAY, DS_LABEL
 
 B_KEY = "idiomatic_only_wrong"
 C_KEY = "paraphrase_only_wrong"
@@ -35,9 +35,12 @@ def _runs(root: Path, dataset: str):
         boot = tables / f"{model_id}_bootstrap.csv"
         if not (sole.exists() and boot.exists()):
             continue
-        counts = pd.read_csv(sole).set_index("variant")["count"]
-        b, c = int(counts[B_KEY]), int(counts[C_KEY])
-        yield model_id, b, c, _mcnemar_cc_p(b, c), float(pd.read_csv(boot)["p_value"].iloc[0])
+        counts: dict[str, int] = (
+            pd.read_csv(sole).set_index("variant")["count"].astype(int).to_dict()
+        )
+        b, c = counts[B_KEY], counts[C_KEY]
+        p_boot = float(pd.read_csv(boot)["p_value"].astype(float).to_list()[0])
+        yield model_id, b, c, _mcnemar_cc_p(b, c), p_boot
 
 
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})

@@ -10,6 +10,7 @@ than printing stale numbers if the underlying results change.
 """
 
 from pathlib import Path
+from typing import TypedDict
 
 import click
 import numpy as np
@@ -17,6 +18,19 @@ import pandas as pd
 from scipy.stats import binom, spearmanr, t
 
 from scripts.gen_report_tables import ALPHA, DATASETS, DS_LABEL, ORDER
+
+
+class Trend(TypedDict):
+    """Spearman results and significant-model counts for one dataset."""
+
+    n: int
+    rho_acc: float
+    p_acc: float
+    rho_par: float
+    p_par: float
+    sig_neg: int
+    sig_pos: int
+
 
 # Billions of parameters, keyed by registry id. Sources are each model's own card;
 # where a name states the size (Qwen2.5-0.5B) that is the figure used, and for
@@ -38,6 +52,9 @@ PARAMS_B = {
     "olmo-2-7b-instruct": 7.0,
 }
 
+# The parameter range the report calls "14-fold" (7B / 0.5B).
+REPORTED_FOLD = 14.0
+
 
 def _min_detectable_rho(n: int, alpha: float) -> float:
     """Smallest |rho| a two-sided Spearman test at this n would call significant.
@@ -48,7 +65,7 @@ def _min_detectable_rho(n: int, alpha: float) -> float:
     return float(crit / np.sqrt(n - 2 + crit**2))
 
 
-def _trends(tables: Path, dataset: str) -> dict:
+def _trends(tables: Path, dataset: str) -> Trend:
     """Spearman rho/p for delta_idiom against original accuracy and parameter count."""
     df = pd.read_csv(tables / f"{dataset}_cross_model.csv")
     assert set(df.model_id) == set(PARAMS_B), f"{dataset}: panel != PARAMS_B keys"
@@ -56,15 +73,16 @@ def _trends(tables: Path, dataset: str) -> dict:
 
     rho_acc, p_acc = spearmanr(df.delta_idiom, df.acc_original)
     rho_par, p_par = spearmanr(df.delta_idiom, params)
-    return {
-        "n": len(df),
-        "rho_acc": rho_acc,
-        "p_acc": p_acc,
-        "rho_par": rho_par,
-        "p_par": p_par,
-        "sig_neg": int(((df.delta_idiom_p < ALPHA) & (df.delta_idiom < 0)).sum()),
-        "sig_pos": int(((df.delta_idiom_p < ALPHA) & (df.delta_idiom > 0)).sum()),
-    }
+    sig = df.delta_idiom_p < ALPHA
+    return Trend(
+        n=len(df),
+        rho_acc=float(rho_acc),
+        p_acc=float(p_acc),
+        rho_par=float(rho_par),
+        p_par=float(p_par),
+        sig_neg=int((sig & (df.delta_idiom < 0)).sum()),
+        sig_pos=int((sig & (df.delta_idiom > 0)).sum()),
+    )
 
 
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})
@@ -82,7 +100,7 @@ def main(tables: Path) -> None:
     sizes = [PARAMS_B[mid] for mid in ORDER]
     assert sizes == sorted(sizes), "ORDER is not ascending in parameter count"
     fold = max(sizes) / min(sizes)
-    assert fold == 14.0, f"parameter range is {fold:g}-fold, report says 14-fold"
+    assert fold == REPORTED_FOLD, f"parameter range is {fold:g}-fold, report says 14-fold"
 
     rows = {ds: _trends(tables, ds) for ds in DATASETS}
     n = rows[DATASETS[0]]["n"]
@@ -100,11 +118,13 @@ def main(tables: Path) -> None:
         )
 
     strongest = max(
-        ((abs(r["rho_par"]), ds, "params") for ds, r in rows.items()),
-        default=(0.0, "", ""),
+        (abs(r[key]), ds, label)
+        for ds, r in rows.items()
+        for key, label in (("rho_par", "params"), ("rho_acc", "orig-acc"))
     )
-    strongest = max(strongest, max((abs(r["rho_acc"]), ds, "orig-acc") for ds, r in rows.items()))
-    click.echo(f"\nLargest |rho| of the six: {strongest[0]:.2f} ({DS_LABEL[strongest[1]]} vs {strongest[2]})")
+    click.echo(
+        f"\nLargest |rho| of the six: {strongest[0]:.2f} ({DS_LABEL[strongest[1]]} vs {strongest[2]})"
+    )
 
     # Multiple comparisons: how surprising is each dataset's count of individually
     # significant models under a true null of 14 independent tests at alpha?
