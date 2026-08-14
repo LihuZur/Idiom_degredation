@@ -567,9 +567,7 @@ tests). On MMLU it holds weakly and only in aggregate, where just one model
 reaches individual significance but the pooled test does ($p = 0.0008$ McNemar,
 $p = 0.0012$ bootstrap). On SST-2 it is contradicted: the mean is $+1.31$~pp,
 five models are significantly \emph{positive} and none negative, and the pooled
-sole-cause test is significant in the opposite direction. On MNLI, moreover,
-idiomaticity costs more than the rewording carrying it ($-1.16$ against
-$-0.69$~pp), whereas on SST-2 the two nearly cancel.
+sole-cause test is significant in the opposite direction.
 
 \textbf{SST-2: rewording hurts, idioms recover.} Original accuracy is high and
 tightly clustered (83.8--91.8\%), and plain paraphrasing costs accuracy for 14
@@ -680,16 +678,22 @@ $-0.29$ ($p = 0.26$) on MNLI; against parameter count, $+0.09$, $+0.07$ and
 $-0.24$ --- all far from significance. Within the Qwen2.5 ladder on MNLI the
 effect is non-monotone ($-0.40$, $-1.59$, $-0.85$, $-1.17$~pp at 0.5B / 1.5B /
 3B / 7B), and the two largest models in the panel sit inside the degraded group
-rather than above it. No correlation reaches significance in either direction;
-the nearest is a control rather than a treatment effect, SST-2
-$\Delta_{\text{par}}$ against accuracy ($\rho = -0.43$, $p = 0.08$), whose sign
-is what a ceiling effect predicts. Rewriting is also not purely destructive ---
-pooled across models, 526 SST-2, 284 MMLU and 1{,}957 MNLI rows were wrong on
-the original but right on both rewrites, which is precisely why the paraphrase
-control is needed.
+rather than above it. The nearest to significance is a control rather than a
+treatment effect, SST-2 $\Delta_{\text{par}}$ against accuracy ($\rho = -0.43$,
+$p = 0.08$), whose sign is what a ceiling effect predicts. Rewriting is also not
+purely destructive --- pooled across models, 526 SST-2, 284 MMLU and 1{,}957 MNLI
+rows were wrong on the original but right on both rewrites.
 
 
 \section{Discussion}
+
+\textbf{The control arm changes what the data say.} Scored as a study without one
+would score it --- idiomatic against original --- SST-2 moves $+0.05$~pp, one
+model of 17 significant: no idiom effect worth reporting. The matched arm
+resolves that null into two cancelling effects, $-1.25$~pp from rewording and
+$+1.31$~pp from idiomatizing it. On MNLI the error inverts: the naive $-1.86$~pp
+includes $-0.69$~pp of plain rewording, overstating the idiom-specific cost by
+roughly 60\%. Neither error is visible without the paraphrase arm.
 
 The sweep supports a narrower claim than the one usually assumed. Idiomatic
 phrasing is not a general accuracy tax on instruction-tuned decoder LLMs: on
@@ -700,8 +704,7 @@ otherwise tracks how directly the rewritten span bears on the answer: MMLU
 rewrites the stem while the knowledge sits in untouched choices ($-0.71$~pp),
 MNLI rewrites the very span the label is computed from ($-1.16$~pp). SST-2
 inverts the scale ($+1.31$~pp), its target property being one idioms carry rather
-than obscure. That coupling, not the presence of idioms, is the most useful
-predictor we can offer.
+than obscure.
 
 The magnitudes are modest even at their strongest. A 1--2~pp mean drop on MNLI is
 real and statistically robust, but it is the same order as the cost of plain
@@ -713,9 +716,8 @@ mode. This tempers, without contradicting, the weaknesses reported directly by
 downstream cost surviving after a model applies whatever partial understanding it
 has. The practical triage rule: work on idiom robustness pays off where
 figurative language can land on the span that determines the answer, and is
-largely wasted where the decision is carried elsewhere. The generic finding
-deserves equal weight --- on SST-2 plain paraphrasing cost more than idiomatizing
-did. Least comfortable is the absence of a scale trend: across an 18-fold
+largely wasted where the decision is carried elsewhere. Least comfortable is the
+absence of a scale trend: across an 18-fold
 parameter range the effect neither shrinks nor grows reliably, so a larger
 checkpoint should not be expected to bring idiom robustness with it.
 
@@ -725,11 +727,17 @@ checkpoint should not be expected to bring idiom robustness with it.
 \textbf{Cross-dataset magnitudes carry an augmenter confound.} MNLI was
 augmented with \texttt{gemini-3.5-flash-lite}, the other two with
 \texttt{gemini-3.6-flash}, and rewrite depth differs accordingly: median
-token-set overlap with the original is 0.33 on MNLI against 0.39 on SST-2 and
-0.54 on MMLU, though dataset and augmenter vary together and cannot be separated
-post hoc. Within a dataset both arms share one augmenter, so the paraphrase
-control still absorbs rewrite depth and the contrast stays internally valid; only
-MNLI's magnitude against the other two is not cleanly comparable.
+token-set overlap between the paraphrase arm and the original is 0.33 on MNLI
+against 0.39 on SST-2 and 0.54 on MMLU, though dataset and augmenter vary
+together and cannot be separated post hoc. Within a dataset both arms share one
+augmenter, so the paraphrase control still absorbs rewrite depth and the contrast
+stays internally valid; only MNLI's magnitude against the other two is not
+cleanly comparable. The two arms are also not matched to \emph{each other} on
+rewrite depth, which \citetf{yang2026compared} argue a paraphrase baseline must
+be: the idiomatic arm stays \emph{closer} to the original (0.44 / 0.50 / 0.64,
+same rows). That is conservative where we report a penalty --- on MNLI and MMLU
+the shallower rewrite still scores lower --- but on SST-2 it partly explains the
+positive $\Delta_{\text{idi}}$, alongside the parse-failure artifact.
 
 \textbf{Validation is incomplete and not independent.} Validation covers label
 preservation and idiom presence/absence, but nothing tests whether a rewrite
