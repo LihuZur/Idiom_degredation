@@ -417,8 +417,8 @@ premise; emitting all of them would repeat the same premise and violate the
 independence assumption behind the paired test, so the loader keeps only the
 first hypothesis per premise. Rows come from the two validation splits combined
 (matched, 9{,}815 pairs; mismatched, 9{,}832), the test labels being withheld.
-Because the mismatched half contributes the five genres absent from training,
-each row's genre is recorded so that genre shift stays visible as a confound.
+The mismatched half contributes the five genres absent from training; each row's
+genre is recorded, but the analysis does not split on it.
 After first-hypothesis selection and cleaning, 5{,}127 premises survive to form
 the MNLI original file, of which 4{,}709 (91.8\%) additionally clear validation
 in \emph{both} rewritten variants and so form the aligned triples the analysis
