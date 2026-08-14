@@ -74,6 +74,45 @@ _VARIANT_COLORS = {
     "idiomatic": "#00CC96",
 }
 
+# The two deltas are chained, not both measured against `original`:
+#   Δ_paraphrase = acc_paraphrase - acc_original   (cost of rewording)
+#   Δ_idiom      = acc_idiomatic  - acc_paraphrase (cost of idiomaticity on top)
+# See `analysis.stats.bootstrap_run`, which is where the points come from.
+# Labelling both "vs. original" misstates the second one, so every axis title
+# and hover box reads its baseline from here.
+_DELTA_BASELINE = {"paraphrase": "original", "idiom": "paraphrase"}
+
+# Several registry ids are internal codenames that do not match the published
+# model name (`hf_repo` in each result JSON is authoritative: `qwen3.5-*` is
+# really Qwen2.5, `gemma-4-*` is really Gemma-2). Figures are read by people,
+# so tick labels carry the published name. The companion CSV/Markdown tables
+# keep the raw `model_id`, which is the join key against `summary.csv`.
+_DISPLAY_NAMES = {
+    "qwen3.5-0.5b-instruct": "Qwen2.5-0.5B",
+    "olmo-2-1b-instruct": "OLMo-2-1B",
+    "qwen3.5-1.5b-instruct": "Qwen2.5-1.5B",
+    "stablelm-2-1.6b-chat": "StableLM-2-1.6B",
+    "smollm2-1.7b-instruct": "SmolLM2-1.7B",
+    "gemma-4-2b-instruct": "Gemma-2-2B",
+    "granite-3.1-2b-instruct": "Granite-3.1-2B",
+    "qwen3.5-3b-instruct": "Qwen2.5-3B",
+    "falcon3-3b-instruct": "Falcon3-3B",
+    "phi-4-mini-instruct": "Phi-4-mini-3.8B",
+    "h2o-danube3-4b-chat": "H2O-Danube3-4B",
+    "yi-1.5-6b-chat": "Yi-1.5-6B",
+    "qwen3.5-7b-instruct": "Qwen2.5-7B",
+    "falcon3-7b-instruct": "Falcon3-7B",
+    "mistral-7b-instruct-v0.3": "Mistral-7B-v0.3",
+    "olmo-2-7b-instruct": "OLMo-2-7B",
+    "gemma-4-9b-instruct": "Gemma-2-9B",
+}
+
+
+def _display(model_id: str) -> str:
+    """Published model name for a registry id, falling back to the id itself."""
+    return _DISPLAY_NAMES.get(model_id, model_id)
+
+
 # Recessive chart chrome. These figures are written as standalone HTML for a
 # light-background report, so the light surface is committed to explicitly
 # rather than inherited from whatever template Plotly defaults to.
@@ -93,6 +132,11 @@ _ALPHA_UNRESOLVED = 0.28
 # horizontal bars per model need enough height that the bars stay thin and the
 # tick label clears its neighbours.
 _ROW_HEIGHT_PX = 46
+# The cross-dataset figure stacks only two bars per model row (the two deltas)
+# rather than three, so it needs less vertical room per row than the
+# per-dataset figure. Keeping it compact also lets it be embedded in a report
+# at full text width without eating half the page.
+_SUMMARY_ROW_HEIGHT_PX = 32
 _CHROME_HEIGHT_PX = 210
 
 # Anchored to the figure container rather than the plot area: these figures
@@ -231,7 +275,7 @@ def _build_dataset_figure(
     # screen. Only the figure is reordered — the caller's list keeps its load
     # order so the companion table stays row-aligned with `summary.csv`.
     plot_runs = sorted(dataset_runs, key=lambda run: run.boot.acc["original"].point)
-    model_ids = [run.result.model_id for run in plot_runs]
+    model_ids = [_display(run.result.model_id) for run in plot_runs]
 
     fig = make_subplots(
         rows=1,
@@ -239,7 +283,7 @@ def _build_dataset_figure(
         shared_yaxes=True,
         column_widths=[0.56, 0.44],
         horizontal_spacing=0.06,
-        subplot_titles=("Accuracy by variant", "Δ vs. original"),
+        subplot_titles=("Accuracy by variant", "Δ vs. preceding variant"),
     )
 
     # Panel 1 — per-variant accuracy, one grouped horizontal bar per model.
@@ -295,7 +339,8 @@ def _build_dataset_figure(
         col=2,
     )
 
-    # Panel 2 — deltas against `original`. Each delta keeps the hue of the
+    # Panel 2 — the two chained deltas (see `_DELTA_BASELINE`; Δ_paraphrase is
+    # measured against `original`, Δ_idiom against `paraphrase`). Each keeps the hue of the
     # variant it came from, so identity carries across the two panels. A bar
     # whose CI clears zero is drawn solid and marked "*"; one that straddles
     # zero recedes — the reader can see at a glance which effects are resolved.
@@ -335,7 +380,7 @@ def _build_dataset_figure(
                 customdata=[(delta.ci_low, delta.ci_high, delta.p_value) for delta in deltas],
                 hovertemplate=(
                     "<b>%{y}</b><br>"
-                    f"Δ{delta_kind} vs. original<br>"
+                    f"Δ{delta_kind} vs. {_DELTA_BASELINE[delta_kind]}<br>"
                     "delta=%{x:+.3f}<br>"
                     f"CI=[%{{customdata[0]:+.3f}}, %{{customdata[1]:+.3f}}]<br>"
                     "p=%{customdata[2]:.3f}"
@@ -537,7 +582,7 @@ def _build_summary_figure(
                     showlegend=col == 1,
                     orientation="h",
                     x=points,
-                    y=models,
+                    y=[_display(m) for m in models],
                     marker={
                         "color": _VARIANT_COLORS[variant],
                         "line": {"width": 0},
@@ -558,7 +603,7 @@ def _build_summary_figure(
                     hovertemplate=(
                         "<b>%{y}</b><br>"
                         f"dataset={dataset}<br>"
-                        f"Δ{delta_kind} vs. original<br>"
+                        f"Δ{delta_kind} vs. {_DELTA_BASELINE[delta_kind]}<br>"
                         "delta=%{x:+.3f}<br>"
                         "CI=[%{customdata[1]:+.3f}, %{customdata[2]:+.3f}]<br>"
                         "p=%{customdata[3]:.3f}<br>"
@@ -589,7 +634,7 @@ def _build_summary_figure(
         barmode="group",
         bargap=0.30,
         bargroupgap=0.12,
-        height=_CHROME_HEIGHT_PX + _ROW_HEIGHT_PX * len(model_order),
+        height=_CHROME_HEIGHT_PX + _SUMMARY_ROW_HEIGHT_PX * len(model_order),
         paper_bgcolor=_SURFACE,
         plot_bgcolor=_SURFACE,
         font={"color": _AXIS_INK, "size": 12},
