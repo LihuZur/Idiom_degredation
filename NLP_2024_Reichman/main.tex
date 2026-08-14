@@ -37,6 +37,7 @@
 \renewcommand{\footnotelayout}{\scriptsize}
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta, positioning, calc}
+\usepackage{multicol}   % two-column bibliography: same entries, half the height
 
 % --- Short-form reference in the page footer at every citation -------------
 % \citetf / \citepf behave exactly like \citet / \citep, and additionally drop
@@ -107,8 +108,9 @@ Idiomatic expressions --- those whose meaning cannot be derived
 compositionally from their individual words, e.g., \emph{``spill the beans''} or
 \emph{``par for the course''} --- are routinely treated in NLP as a harder case
 for language models than direct, literal phrasing. The premise is intuitive:
-idioms are culturally specific and comparatively rare in balanced training data
-relative to literal phrasing of the same content. It is, however, rarely tested
+idioms are culturally specific and non-compositional, so a model must have
+learned an expression rather than derived it, and models do degrade on
+expressions they have not seen \citepf{tayyar2021astitch}. It is, however, rarely tested
 \emph{in isolation}: any two rewordings of a sentence already differ lexically and
 syntactically, so an observed accuracy drop after ``idiomatizing'' it could simply
 be an artifact of rewording in general.
@@ -126,8 +128,12 @@ reworded \textbf{with} one or more natural idiomatic expressions and the same
 meaning. The label $y$ is preserved across all three variants by construction
 (\S\ref{sec:augmentation}), and each variant is evaluated under an identical
 prompt template, so only the input's surface form changes between runs.
-The question matters practically: idiomatic language is common in the
-user-generated text deployed systems must handle. If idiomaticity has an
+The question matters practically wherever informal text reaches a classifier
+rather than being authored for one --- review and social-media sentiment,
+support-ticket triage, content moderation --- because there figurative phrasing
+is a property of the incoming data rather than a choice the system can make;
+SST-2's own snippets are already partly figurative before any rewriting
+(\S\ref{sec:datasets}). If idiomaticity has an
 isolable negative effect, that bears on prompt engineering, augmentation
 strategy, and robustness evaluation; if apparent idiom failures are merely
 generic paraphrase sensitivity, effort spent specifically on idiom handling is
@@ -135,7 +141,10 @@ misplaced relative to general robustness-to-rewording work.
 
 \textbf{Contributions.} We contribute (i) the paraphrase-controlled design just
 described, in which the paraphrase arm absorbs the generic cost of rewording and
-leaves the idiom-specific effect isolated; (ii) a \emph{sole-cause} diagnostic
+leaves the idiom-specific effect isolated --- instantiating for a linguistic
+property the control-condition logic concurrent work establishes in general
+\citepf{yang2026compared}, and finding a residual that, unlike that demographic
+case, survives its baseline; (ii) a \emph{sole-cause} diagnostic
 that, restricted to items a model already answers correctly, identifies which
 single rewrite is responsible when exactly one of the two flips the answer;
 (iii) dual significance testing, pairing a continuity-corrected McNemar test
@@ -295,11 +304,14 @@ choices) carry through unchanged.
 
 \textbf{Stage 2: Augment.} Each cleaned row is rewritten by an external
 LLM (Google Gemini) into two variants using two
-distinct, fixed prompt templates. Templates are selected per dataset, so a
+distinct, fixed prompt templates. One Gemini sub-model is pinned per dataset for
+cost reasons (\texttt{gemini-3.6-flash} for SST-2 and MMLU,
+\texttt{gemini-3.5-flash-lite} for MNLI), shared by both of that dataset's arms;
+\S\ref{sec:threats} treats the confound this introduces.
+Templates are selected per dataset, so a
 task whose input is not a free-standing sentence can use wording suited to it
 (MNLI, whose rewrite target is a premise judged against a fixed hypothesis,
-uses its own NLI-specific pair of templates) without perturbing the prompt
-hashes, and therefore the warm caches, of the other datasets:
+uses its own NLI-specific pair of templates):
 
 the \emph{paraphrase prompt} asks for a rewording in different words that
 explicitly avoids idiomatic expressions, and the \emph{idiomatic prompt} asks
@@ -318,10 +330,9 @@ requiring a genuine idiom in the idiomatic variant and none in the paraphrase.
 Rows that fail validation after a bounded number of retries are dropped from
 that variant (recorded in a sidecar manifest for transparency), which is why
 the paraphrase/idiomatic CSVs are typically somewhat smaller than the
-original CSV. An on-disk response cache, keyed by (prompt hash, augmenter
-model, input id), makes reruns idempotent and avoids re-incurring API cost
-for rows that have already been successfully augmented under an unchanged
-configuration. Table~\ref{tab:examples} shows one produced triple per dataset.
+original CSV. An on-disk response cache keyed by (prompt hash, augmenter model,
+input id) makes reruns idempotent and avoids re-incurring API cost.
+Table~\ref{tab:examples} shows one produced triple per dataset.
 
 \begin{table}[t]
 \centering
@@ -367,6 +378,7 @@ idiomatic  & Which of the following scenarios would \textbf{push out} a nation's
 \end{table}
 
 \subsection{Datasets}
+\label{sec:datasets}
 
 
 Three datasets are evaluated, each scored with the accuracy metric used in its
@@ -432,7 +444,9 @@ CUDA, Apple-Silicon MPS, or CPU and adjusts precision accordingly.
 run on all three variant CSVs with the identical prompt, and predictions are
 joined by row id, yielding one matched (original, paraphrase, idiomatic)
 triple of predictions per surviving row. Per-variant accuracy is computed
-directly from these joined predictions.
+directly from these joined predictions, scoring as incorrect any generation the
+dataset's parser cannot map to a label --- a choice \S\ref{sec:results} re-tests
+on the subset where all three variants parsed.
 
 \subsection{Statistical framework}
 \label{sec:stats}
@@ -508,7 +522,7 @@ rows), but those rows have no counterpart to pair against.
 means across models in percentage points; \emph{sig.} counts models with a
 significant negative / positive $\Delta_{\text{idi}}$ ($p < 0.05$, McNemar exact).
 \emph{Parse-clean} repeats both after dropping every triple in which any variant
-failed to parse, since an unparseable generation is scored as incorrect. The
+failed to parse. The
 pooled sole-cause columns sum $b$ (idiomatic-only-wrong) and $c$
 (paraphrase-only-wrong) across models and test the gap with continuity-corrected
 McNemar and a 10{,}000-resample paired bootstrap.}
@@ -656,9 +670,9 @@ idiomatic  & \texttt{Question:} \textbf{In Nagel's eyes}, the view that moral lu
 \end{tabular}
 \end{table}
 
-\textbf{Robustness to generation-format failures.} An unparseable generation is
-scored as incorrect, so a variant provoking more format violations is penalised
-for a reason unrelated to idiom comprehension. Rates are low on average (1.3\%
+\textbf{Robustness to generation-format failures.} A variant provoking more
+format violations is thus penalised for a reason unrelated to idiom
+comprehension. Rates are low on average (1.3\%
 on SST-2, 0.7\% on MMLU, 0.3\% on MNLI) but uneven --- StableLM-2-1.6B fails on
 up to 10.5\% of MMLU items --- and on SST-2 unbalanced across variants: the
 \emph{paraphrase} arm fails more often than the idiomatic arm for 14 of 17
@@ -702,7 +716,9 @@ binary sentiment it did not hurt at all, and on knowledge QA only one model of
 is \emph{load-bearing for the decision} --- exactly the MNLI configuration --- and
 otherwise tracks how directly the rewritten span bears on the answer: MMLU
 rewrites the stem while the knowledge sits in untouched choices ($-0.71$~pp),
-MNLI rewrites the very span the label is computed from ($-1.16$~pp). SST-2
+MNLI rewrites the very span the label is computed from ($-1.16$~pp) --- a
+ranking, not a clean magnitude comparison, since MNLI's augmenter and rewrite
+depth differ from the other two datasets' (\S\ref{sec:threats}). SST-2
 inverts the scale ($+1.31$~pp), its target property being one idioms carry rather
 than obscure.
 
@@ -724,9 +740,9 @@ checkpoint should not be expected to bring idiom robustness with it.
 \subsection{Threats to validity}
 \label{sec:threats}
 
-\textbf{Cross-dataset magnitudes carry an augmenter confound.} MNLI was
-augmented with \texttt{gemini-3.5-flash-lite}, the other two with
-\texttt{gemini-3.6-flash}, and rewrite depth differs accordingly: median
+\textbf{Cross-dataset magnitudes carry an augmenter confound.} The augmenter
+differs by dataset (\S\ref{sec:augmentation}), and rewrite depth differs
+accordingly: median
 token-set overlap between the paraphrase arm and the original is 0.33 on MNLI
 against 0.39 on SST-2 and 0.54 on MMLU, though dataset and augmenter vary
 together and cannot be separated post hoc. Within a dataset both arms share one
@@ -747,7 +763,7 @@ exactly where the effect was found, since an MNLI premise whose meaning shifts
 changes the entailment relation outright. The same augmenter LLM both writes and
 grades the rewrite, so validation is not independent of generation either.
 
-\textbf{The statistical treatment has two known weaknesses.} The parse-failure
+\textbf{The statistical treatment has three known weaknesses.} The parse-failure
 filter is blunt --- it drops 2.8\% of SST-2 rows on average but over 12\% for
 two models there, and 15.9\% for StableLM-2-1.6B-Chat on MMLU, and dropping
 rows non-randomly can itself
@@ -755,7 +771,10 @@ bias a comparison --- so filtered and unfiltered readings bracket the truth. The
 pooled tests also treat models' items as exchangeable when the same row recurs
 once per model; a mixed-effects model with model as a random effect was not run,
 so pooled figures --- including MMLU's, whose significance rests entirely on
-pooling --- are indicative, not definitive.
+pooling --- are indicative, not definitive. No multiple-comparisons correction is
+applied either: at $\alpha = 0.05$ across 17 per-model tests, about one
+significant result per dataset is expected under a true null, so MMLU's single
+one carries little weight alone and only MNLI's count of 10 is clear of chance.
 
 \textbf{Residual dataset artifacts.} MNLI merges the matched and mismatched
 validation splits, mixing five genres absent from training with five present, and
@@ -783,7 +802,11 @@ labelled examples do for the fine-tuned encoders of \citetf{tayyar2021astitch}.
 
 Code repository: \url{https://github.com/LihuZur/Idiom_degredation} % TODO: confirm final repo URL/visibility before submission
 
-{\scriptsize\setlength{\bibsep}{2pt}
+{\scriptsize\setlength{\bibsep}{1pt}
+\setlength{\columnsep}{14pt}
+\begin{multicols}{2}
+\raggedright   % narrow measure: don't stretch lines around unbreakable URLs
 \bibliographystyle{unsrtnat}
-\bibliography{references}}
+\bibliography{references}
+\end{multicols}}
 \end{document}
