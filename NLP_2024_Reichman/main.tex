@@ -125,8 +125,9 @@ variants that share the same rewriting budget but differ in exactly one property
 $x_{\text{paraphrase}}$, reworded \textbf{without} idioms, the \emph{control}
 condition isolating the effect of rewording alone; and $x_{\text{idiomatic}}$,
 reworded \textbf{with} one or more natural idiomatic expressions and the same
-meaning. The label $y$ is preserved across all three variants by construction
-(\S\ref{sec:augmentation}), and each variant is evaluated under an identical
+meaning. The label $y$ is given to the rewriter and re-checked afterwards,
+failures being dropped rather than relabelled (\S\ref{sec:augmentation}), and
+each variant is evaluated under an identical
 prompt template, so only the input's surface form changes between runs.
 The question matters practically wherever informal text reaches a classifier
 rather than being authored for one --- review and social-media sentiment,
@@ -144,12 +145,13 @@ described, in which the paraphrase arm absorbs the generic cost of rewording and
 leaves the idiom-specific effect isolated --- instantiating for a linguistic
 property the control-condition logic concurrent work establishes in general
 \citepf{yang2026compared}, and finding a residual that, unlike that demographic
-case, survives its baseline; (ii) a \emph{sole-cause} diagnostic
+case, survives its baseline on inference though not elsewhere;
+(ii) a \emph{sole-cause} diagnostic
 that, restricted to items a model already answers correctly, identifies which
 single rewrite is responsible when exactly one of the two flips the answer;
 (iii) dual significance testing, pairing a continuity-corrected McNemar test
-with an independent non-parametric bootstrap to guard against the chi-square
-approximation on small discordant-pair counts; (iv) breadth --- 14
+with a non-parametric bootstrap under different assumptions, guarding against
+the chi-square approximation on small discordant-pair counts; (iv) breadth --- 14
 instruction-tuned decoder LLMs from 0.5B to 7B across 10 families, on three
 datasets spanning sentiment, knowledge QA and inference, for 42 runs with a
 pooled cross-model test per dataset; and (v) a reproducible four-stage pipeline
@@ -433,7 +435,8 @@ the Qwen2.5-Instruct family (0.5B / 1.5B / 7B), the Falcon3-Instruct family
 (3B / 7B), the OLMo-2-Instruct family (1B / 7B), Gemma-2-2B-it,
 Mistral-7B-Instruct-v0.3, Phi-4-mini-instruct (3.8B),
 Granite-3.1-2B-Instruct, H2O-Danube3-4B-Chat, Yi-1.5-6B-Chat, and
-SmolLM2-1.7B-Instruct.
+SmolLM2-1.7B-Instruct. Tables and prose below drop the
+\texttt{-Instruct}/\texttt{-it}/\texttt{-Chat} suffix.
 All models are evaluated zero-shot with an identical
 dataset-specific prompt template applied to all three variants of a row, so
 only the input text differs between runs; a device-agnostic runner selects
@@ -493,8 +496,7 @@ paired bootstrap \citepf{efron1993bootstrap}: the aligned
 rows are resampled with replacement 10{,}000 times, $b - c$ is recomputed on
 each resample, and a 95\% percentile interval plus a two-sided empirical
 p-value are read off the result. A result counts as robustly significant only
-when both checks agree; when they disagree the more conservative verdict is
-preferred.
+when both checks agree, as they do in all 42 per-model runs.
 
 The same sole-cause statistics are additionally pooled across all evaluated
 models for a given dataset (summing $b$ and $c$, and resampling from the
@@ -538,7 +540,7 @@ Dataset & Models & $n$ & $\Delta_{\text{par}}$ & $\Delta_{\text{idi}}$ & sig.
 \midrule
 SST-2 & 14 & 1{,}548 & $-1.28$ & $+1.35$ & 0 / 5 & $+0.76$ & 0 / 3 & 533 / 723 & 28.4 & $<$0.0001 & $<$0.0001 \\
 MMLU & 14 & 1{,}085 & $+0.13$ & $-0.79$ & 1 / 0 & $-0.77$ & 1 / 0 & 474 / 378 & 10.6 & 0.0011 & $<$0.0001 \\
-MNLI & 14 & 4{,}709 & $-0.68$ & $-1.28$ & 10 / 0 & $-1.26$ & 10 / 0 & 2804 / 2246 & 61.4 & $<$0.0001 & $<$0.0001 \\
+MNLI & 14 & 4{,}709 & $-0.68$ & $-1.28$ & 10 / 0 & $-1.26$ & 10 / 0 & 2{,}804 / 2{,}246 & 61.4 & $<$0.0001 & $<$0.0001 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -595,7 +597,8 @@ much more widely (29.7--68.7\%, against a 25\% chance floor) and both deltas are
 small: $\Delta_{\text{par}}$ averages $+0.13$~pp with no model significantly
 degraded, $\Delta_{\text{idi}}$ $-0.79$~pp with only H2O-Danube3-4B individually
 significant. The sole-cause direction is consistent enough ($b > c$ for 9 of 14
-models) that pooling turns it into a clear signal. The small magnitude is likely
+models) that pooling turns it into a significant one --- though pooled-only,
+hence indicative (\S\ref{sec:threats}). The small magnitude is likely
 structural: only the stem is rewritten, while the answer choices --- where an
 MMLU item's knowledge requirement sits --- are untouched, so an idiom can
 obscure what is asked but not what the model must know. Models near the chance
@@ -669,9 +672,9 @@ idiomatic  & \texttt{Question:} \textbf{In Nagel's eyes}, the view that moral lu
 \end{tabular}
 \end{table}
 
-\textbf{Robustness to generation-format failures.} A variant provoking more
-format violations is thus penalised for a reason unrelated to idiom
-comprehension. Rates are low on average (1.0\%
+\textbf{Robustness to generation-format failures.} Unparseable generations score
+as incorrect, so a variant provoking more format violations is penalised for a
+reason unrelated to idiom comprehension. Rates are low on average (1.0\%
 on SST-2, 0.2\% on MMLU, 0.3\% on MNLI) but uneven --- Mistral-7B-v0.3 fails on
 up to 6.7\% of SST-2 items --- and on SST-2 unbalanced across variants: the
 \emph{paraphrase} arm fails more often than the idiomatic arm for 11 of 14
@@ -733,9 +736,11 @@ downstream cost surviving after a model applies whatever partial understanding i
 has. The practical triage rule: work on idiom robustness pays off where
 figurative language can land on the span that determines the answer, and is
 largely wasted where the decision is carried elsewhere. Least comfortable is the
-absence of a scale trend: across a 14-fold
-parameter range the effect neither shrinks nor grows reliably, so a larger
-checkpoint should not be expected to bring idiom robustness with it.
+absence of any \emph{detectable} scale trend: across a 14-fold parameter range no
+correlation exceeds $0.30$, but with 14 models only $|\rho| \gtrsim 0.53$ would
+reach significance --- absence of evidence, not evidence of absence. A larger
+checkpoint cannot be assumed to bring idiom robustness with it, though a moderate
+trend is not ruled out.
 
 \subsection{Threats to validity}
 \label{sec:threats}
@@ -746,17 +751,19 @@ Mistral-7B-v0.3 there, and 8.2\% for OLMo-2-1B on MNLI, and dropping
 rows non-randomly can itself
 bias a comparison --- so filtered and unfiltered readings bracket the truth. The
 pooled tests also treat models' items as exchangeable when the same row recurs
-once per model; a mixed-effects model with model as a random effect was not run,
-so pooled figures --- including MMLU's, whose significance rests entirely on
-pooling --- are indicative, not definitive. No multiple-comparisons correction is
-applied either: at $\alpha = 0.05$ across 14 per-model tests, roughly one
-significant result per dataset is expected under a true null, so MMLU's single
-one carries little weight alone and only MNLI's count of 10 is clear of chance.
+once per model, so a row that is idiom-hard for many models is resampled as many
+independent observations --- clustering that narrows pooled intervals and makes
+pooled p-values optimistic. No mixed-effects model was run, so pooled figures ---
+including MMLU's, which rests entirely on pooling --- are indicative, not
+definitive. No multiple-comparisons correction is applied either: 14 tests at
+$\alpha = 0.05$ expect 0.7 hits under a true null, so MMLU's single one carries
+little weight ($P(X \geq 1) = 0.51$) while MNLI's 10 and SST-2's five positives
+are clear of chance ($8 \times 10^{-11}$, $4 \times 10^{-4}$).
 
 \textbf{Scope limits.} Every model was evaluated zero-shot, greedily, under a
 single prompt template per dataset, so few-shot prompting, sampled decoding and
 prompt-format variation are untested and could interact with idiomaticity; the
-fine-tuned encoder track is deferred.
+panel is also decoder-only.
 
 \subsection{Future work}
 \label{sec:futurework}
@@ -787,8 +794,8 @@ the label is computed from: $-1.28$~pp on MNLI, significant for 10 of the 14
 models, against $-0.79$~pp on MMLU with a single significant model and no
 penalty at all on binary sentiment. Idiomaticity is therefore a distinguishable
 contributor to paraphrase sensitivity rather than a separate failure mode, and
-scale does not absolve it --- across a 14-fold parameter range the effect neither
-shrinks nor grows reliably.
+no scale trend is detectable across a 14-fold parameter range, though 14 models
+could not detect a moderate one.
 
 \section{Code}
 
