@@ -434,10 +434,7 @@ the Qwen2.5-Instruct family (0.5B / 1.5B / 7B), the Falcon3-Instruct family
 Mistral-7B-Instruct-v0.3, Phi-4-mini-instruct (3.8B),
 Granite-3.1-2B-Instruct, H2O-Danube3-4B-Chat, Yi-1.5-6B-Chat, and
 SmolLM2-1.7B-Instruct.
-Spanning multiple scales \emph{within} a family (three Qwen2.5 sizes) as well as
-different families at similar scale lets the analysis separate size-driven from
-family-driven effects rather than conflating them, as a single family swept
-across sizes would. All models are evaluated zero-shot with an identical
+All models are evaluated zero-shot with an identical
 dataset-specific prompt template applied to all three variants of a row, so
 only the input text differs between runs; a device-agnostic runner selects
 CUDA, Apple-Silicon MPS, or CPU and adjusts precision accordingly.
