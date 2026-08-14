@@ -17,14 +17,21 @@ _CI = 0.95
 _SEED = 0
 
 
-def test_dataset_registry_has_sst2_mmlu_and_mnli() -> None:
-    assert set(data_reg.list_datasets()) == {"sst2", "mmlu", "mnli"}
-    assert model_reg.list_models() == [
-        "deepseek-r1-distill-qwen-7b",
+# The 17 models the report evaluates. New registrations may be added freely, but
+# none of these may disappear: the published results depend on them. Asserting a
+# subset rather than the exact list is deliberate — an exact list went stale every
+# time a model was registered, which is what this test used to fail on.
+_REPORTED_MODELS = frozenset(
+    {
+        "falcon3-3b-instruct",
+        "falcon3-7b-instruct",
         "gemma-4-2b-instruct",
         "gemma-4-9b-instruct",
-        "llama-3.2-1b-instruct",
+        "granite-3.1-2b-instruct",
+        "h2o-danube3-4b-chat",
         "mistral-7b-instruct-v0.3",
+        "olmo-2-1b-instruct",
+        "olmo-2-7b-instruct",
         "phi-4-mini-instruct",
         "qwen3.5-0.5b-instruct",
         "qwen3.5-1.5b-instruct",
@@ -32,7 +39,18 @@ def test_dataset_registry_has_sst2_mmlu_and_mnli() -> None:
         "qwen3.5-7b-instruct",
         "smollm2-1.7b-instruct",
         "stablelm-2-1.6b-chat",
-    ]
+        "yi-1.5-6b-chat",
+    }
+)
+
+
+def test_dataset_registry_has_sst2_mmlu_and_mnli() -> None:
+    assert set(data_reg.list_datasets()) == {"sst2", "mmlu", "mnli"}
+    models = model_reg.list_models()
+    assert models == sorted(models), "list_models() must return sorted ids"
+    assert len(models) == len(set(models)), "duplicate model ids registered"
+    missing = sorted(_REPORTED_MODELS - set(models))
+    assert not missing, f"models used in the report are no longer registered: {missing}"
     assert aug_reg.list_augmenters() == ["anthropic", "gemini", "openai"]
     assert set(aug_reg.list_validators()) == {
         "semantic_similarity",
