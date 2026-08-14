@@ -29,36 +29,16 @@ def _parse_meta(meta_str: str | None) -> dict[str, Any]:
 def strip_reasoning_trace(raw: str) -> str:
     """Drop a leading <think>...</think> block so parsers see only the final answer.
 
-    Reasoning-distill models (e.g. DeepSeek-R1 distills) always emit a chain-of-thought
-    block that mentions every answer option before concluding, regardless of system-prompt
-    instructions asking for a bare answer. Evaluator.parse() implementations must call this
-    first, or naive first-occurrence matching will pick up letters/words from the reasoning
-    instead of the model's actual final answer.
+    A model that emits a chain-of-thought block mentions every answer option before
+    concluding, regardless of system-prompt instructions asking for a bare answer.
+    Evaluator.parse() implementations must call this first, or naive first-occurrence
+    matching will pick up letters/words from the reasoning instead of the model's
+    actual final answer. No model in the registry emits such a block, so this is a
+    defensive guard rather than a live code path.
     """
     if "</think>" in raw:
         return raw.split("</think>", 1)[1]
     return raw
-
-
-# Model ids that always emit a <think>...</think> chain-of-thought before their final
-# answer (STAGE3_PLAN reasoning-distill models). Keep in sync with models/registry.py.
-_REASONING_MODELS = frozenset({"deepseek-r1-distill-qwen-7b"})
-
-
-def is_reasoning_model(model_name: str) -> bool:
-    """Whether `model_name` is a reasoning-distill model that emits a <think> trace."""
-    return model_name in _REASONING_MODELS
-
-
-def reasoning_output_truncated(raw: str, model_name: str) -> bool:
-    """True if a reasoning model's generation was cut off before closing its <think> block.
-
-    max_new_tokens is only a cap, not a guarantee: a reasoning trace can still exceed it,
-    leaving no closing `</think>` in `raw`. In that case the model never actually stated its
-    final answer, so callers must treat the output as unparseable instead of naively
-    searching the incomplete reasoning trace for an answer-shaped token.
-    """
-    return is_reasoning_model(model_name) and "</think>" not in raw
 
 
 @dataclass(frozen=True, slots=True)

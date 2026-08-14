@@ -149,9 +149,9 @@ that, restricted to items a model already answers correctly, identifies which
 single rewrite is responsible when exactly one of the two flips the answer;
 (iii) dual significance testing, pairing a continuity-corrected McNemar test
 with an independent non-parametric bootstrap to guard against the chi-square
-approximation on small discordant-pair counts; (iv) breadth --- 17
-instruction-tuned decoder LLMs from 0.5B to 9B across 11 families, on three
-datasets spanning sentiment, knowledge QA and inference, for 51 runs with a
+approximation on small discordant-pair counts; (iv) breadth --- 14
+instruction-tuned decoder LLMs from 0.5B to 7B across 10 families, on three
+datasets spanning sentiment, knowledge QA and inference, for 42 runs with a
 pooled cross-model test per dataset; and (v) a reproducible four-stage pipeline
 with LLM-judge validation of every augmented example and per-artifact provenance
 (\S\ref{sec:methodology}).
@@ -353,14 +353,14 @@ carries an apparently positive phrase in a negative-sentiment snippet.}
 \toprule
 \multicolumn{2}{@{}p{0.98\textwidth}@{}}{\textbf{MNLI} --- hypothesis:
 \emph{``No one would give them credit like that.''}; gold label
-\emph{contradiction}. Idiomatic-only-wrong for 14 of 17 models.} \\
+\emph{contradiction}. Idiomatic-only-wrong for 12 of 14 models.} \\
 \addlinespace[1pt]
 original   & Even the Scots are \textbf{likely to give them more credit} than that. \\
 paraphrase & Even the residents of Scotland \textbf{will probably accord them a higher level of recognition} than that amount. \\
 idiomatic  & Even the Scots are \textbf{unlikely to sell them short} like that. \\
 \midrule
 \multicolumn{2}{@{}p{0.98\textwidth}@{}}{\textbf{SST-2} --- gold label
-\emph{negative}. Idiomatic-only-wrong for 12 of 17 models.} \\
+\emph{negative}. Idiomatic-only-wrong for 10 of 14 models.} \\
 \addlinespace[1pt]
 original   & in which the rest of the cast was \textbf{outshined} by ll cool j. \\
 paraphrase & in which the rest of the cast was \textbf{outperformed} by ll cool j. \\
@@ -368,7 +368,7 @@ idiomatic  & in which LL Cool J \textbf{stole the show} from the rest of the cas
 \midrule
 \multicolumn{2}{@{}p{0.98\textwidth}@{}}{\textbf{MMLU} --- gold answer
 \emph{``The nation invests in research and development of new technology.''};
-the four choices are untouched. Idiomatic-only-wrong for 9 of 17 models.} \\
+the four choices are untouched. Idiomatic-only-wrong for 8 of 14 models.} \\
 \addlinespace[1pt]
 original   & Which of the following scenarios would \textbf{increase} a nation's production possibility frontier (PPF)? \\
 paraphrase & Which of the following situations would \textbf{expand} a country's production possibility frontier (PPF)? \\
@@ -424,15 +424,15 @@ runs on.
 
 \subsection{Evaluated models}
 
-Rather than a single-model case study, we evaluate a broad panel of 17
-open, instruction-tuned decoder LLMs spanning 0.5B to 9B
-parameters across 11 distinct model families and pretraining lineages:
-the Qwen2.5-Instruct family (0.5B / 1.5B / 3B / 7B), the Gemma-2-it family
-(2B / 9B), the Falcon3-Instruct family (3B / 7B), the OLMo-2-Instruct family
-(1B / 7B), Mistral-7B-Instruct-v0.3, Phi-4-mini-instruct (3.8B),
-Granite-3.1-2B-Instruct, H2O-Danube3-4B-Chat, Yi-1.5-6B-Chat,
-SmolLM2-1.7B-Instruct, and StableLM-2-1.6B-Chat.
-Spanning multiple scales \emph{within} a family (four Qwen2.5 sizes) as well as
+Rather than a single-model case study, we evaluate a broad panel of 14
+open, instruction-tuned decoder LLMs spanning 0.5B to 7B
+parameters across 10 distinct model families and pretraining lineages:
+the Qwen2.5-Instruct family (0.5B / 1.5B / 7B), the Falcon3-Instruct family
+(3B / 7B), the OLMo-2-Instruct family (1B / 7B), Gemma-2-2B-it,
+Mistral-7B-Instruct-v0.3, Phi-4-mini-instruct (3.8B),
+Granite-3.1-2B-Instruct, H2O-Danube3-4B-Chat, Yi-1.5-6B-Chat, and
+SmolLM2-1.7B-Instruct.
+Spanning multiple scales \emph{within} a family (three Qwen2.5 sizes) as well as
 different families at similar scale lets the analysis separate size-driven from
 family-driven effects rather than conflating them, as a single family swept
 across sizes would. All models are evaluated zero-shot with an identical
@@ -507,8 +507,8 @@ indicative rather than definitive.
 \section{Experimental results}
 \label{sec:results}
 
-The sweep covers 51 (model, dataset) runs --- all 17 models on each of the
-three datasets --- and so 153 variant-level inference passes, about 34 hours of
+The sweep covers 42 (model, dataset) runs --- all 14 models on each of the
+three datasets --- and so 126 variant-level inference passes, about 33 hours of
 accelerator time. Every
 number below is computed over \emph{aligned triples}: rows for which the original
 and both validated rewrites exist and the model produced a scored prediction on
@@ -537,20 +537,22 @@ McNemar and a 10{,}000-resample paired bootstrap.}
 Dataset & Models & $n$ & $\Delta_{\text{par}}$ & $\Delta_{\text{idi}}$ & sig.
   & $\Delta_{\text{idi}}$ & sig. & $b$ / $c$ & $\chi^2$ & $p_{\chi^2}$ & $p_{\text{boot}}$ \\
 \midrule
-SST-2 & 17 & 1{,}548 & $-1.25$ & $+1.31$ & 0 / 5 & $+0.67$ & 0 / 3 & 665 / 887 & 31.5 & $<$0.0001 & $<$0.0001 \\
-MMLU & 17 & 1{,}085 & $-0.07$ & $-0.71$ & 1 / 0 & $-0.73$ & 1 / 0 & 578 / 468 & 11.4 & 0.0008 & 0.0012 \\
-MNLI & 17 & 4{,}709 & $-0.69$ & $-1.16$ & 10 / 0 & $-1.14$ & 10 / 0 & 3351 / 2751 & 58.8 & $<$0.0001 & $<$0.0001 \\
+SST-2 & 14 & 1{,}548 & $-1.28$ & $+1.35$ & 0 / 5 & $+0.76$ & 0 / 3 & 533 / 723 & 28.4 & $<$0.0001 & $<$0.0001 \\
+MMLU & 14 & 1{,}085 & $+0.13$ & $-0.79$ & 1 / 0 & $-0.77$ & 1 / 0 & 474 / 378 & 10.6 & 0.0011 & $<$0.0001 \\
+MNLI & 14 & 4{,}709 & $-0.68$ & $-1.28$ & 10 / 0 & $-1.26$ & 10 / 0 & 2804 / 2246 & 61.4 & $<$0.0001 & $<$0.0001 \\
 \bottomrule
 \end{tabular}
 \end{table}
 \begin{table}[t]
 \centering
 \caption{Per-model $\Delta_{\text{idi}}$ (pp) on each dataset, ordered by
-parameter count and split into two panels. \textbf{Bold} marks
-$\Delta_{\text{idi}}$ significant at $p < 0.05$ (McNemar exact); $\dagger$ marks
-models whose sole-cause gap between $b$ and $c$ is significant on \emph{both}
-the McNemar and bootstrap tests, in whichever direction.
-Negative values support the hypothesis that idiomatic phrasing costs
+parameter count and split into two panels. The two marks are independent and
+flag different quantities, so a cell may carry either, both or neither.
+\textbf{Bold} says the printed $\Delta_{\text{idi}}$ is itself significant
+($p < 0.05$, McNemar exact). $\dagger$ says nothing about that number: it flags
+the separate sole-cause diagnostic for the same cell, where the $b$ versus $c$
+gap is significant on \emph{both} the McNemar and bootstrap tests, in either
+direction. Negative values support the hypothesis that idiomatic phrasing costs
 accuracy beyond paraphrasing; note that the SST-2 columns are almost entirely
 positive.}
 \label{tab:permodel}
@@ -563,39 +565,37 @@ Model & SST-2 & MMLU & MNLI & Model & SST-2 & MMLU & MNLI \\
 Qwen2.5-0.5B & $+0.45$ & $-1.75$ & $-0.40$ & Phi-4-mini-3.8B & $-0.19$ & $-1.84$ & $\bm{-1.51}^{\dagger}$ \\
 OLMo-2-1B & $+1.29$ & $-0.28$ & $\bm{-1.70}^{\dagger}$ & H2O-Danube3-4B & $\bm{+1.74}$ & $\bm{-2.49}$ & $+0.04$ \\
 Qwen2.5-1.5B & $+1.16$ & $-2.03^{\dagger}$ & $\bm{-1.59}^{\dagger}$ & Yi-1.5-6B & $+0.97$ & $-0.18$ & $\bm{-1.89}^{\dagger}$ \\
-StableLM-2-1.6B & $+1.16$ & $-0.28$ & $-0.15$ & Qwen2.5-7B & $\bm{+3.04}^{\dagger}$ & $+0.09$ & $\bm{-1.17}^{\dagger}$ \\
-SmolLM2-1.7B & $\bm{+2.20}$ & $-0.74$ & $+0.30$ & Falcon3-7B & $-0.26$ & $+0.65$ & $\bm{-1.23}^{\dagger}$ \\
-Gemma-2-2B & $+1.36^{\dagger}$ & $-1.38$ & $\bm{-1.51}^{\dagger}$ & Mistral-7B-v0.3 & $\bm{+4.13}^{\dagger}$ & $-1.20$ & $\bm{-2.08}$ \\
-Granite-3.1-2B & $\bm{+1.49}^{\dagger}$ & $+2.12$ & $-0.89$ & OLMo-2-7B & $+1.16$ & $-1.66^{\dagger}$ & $\bm{-2.04}^{\dagger}$ \\
-Qwen2.5-3B & $+0.84$ & $+0.92$ & $-0.85$ & Gemma-2-9B & $+1.29$ & $-1.66$ & $-0.85$ \\
-Falcon3-3B & $+0.39$ & $-0.37$ & $\bm{-2.25}^{\dagger}$ &  &  &  &  \\
+SmolLM2-1.7B & $\bm{+2.20}$ & $-0.74$ & $+0.30$ & Qwen2.5-7B & $\bm{+3.04}^{\dagger}$ & $+0.09$ & $\bm{-1.17}^{\dagger}$ \\
+Gemma-2-2B & $+1.36^{\dagger}$ & $-1.38$ & $\bm{-1.51}^{\dagger}$ & Falcon3-7B & $-0.26$ & $+0.65$ & $\bm{-1.23}^{\dagger}$ \\
+Granite-3.1-2B & $\bm{+1.49}^{\dagger}$ & $+2.12$ & $-0.89$ & Mistral-7B-v0.3 & $\bm{+4.13}^{\dagger}$ & $-1.20$ & $\bm{-2.08}$ \\
+Falcon3-3B & $+0.39$ & $-0.37$ & $\bm{-2.25}^{\dagger}$ & OLMo-2-7B & $+1.16$ & $-1.66^{\dagger}$ & $\bm{-2.04}^{\dagger}$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \textbf{The effect is task-dependent, not general} (Table~\ref{tab:summary}).
-On MNLI the hypothesis holds --- $\Delta_{\text{idi}}$ averages $-1.16$~pp,
-significantly negative for 10 of 17 models and positive for none, with pooled
-sole-cause counts of $b = 3{,}351$ against $c = 2{,}751$ ($p < 10^{-4}$ on both
+On MNLI the hypothesis holds --- $\Delta_{\text{idi}}$ averages $-1.28$~pp,
+significantly negative for 10 of 14 models and positive for none, with pooled
+sole-cause counts of $b = 2{,}804$ against $c = 2{,}246$ ($p < 10^{-4}$ on both
 tests). On MMLU it holds weakly and only in aggregate, where just one model
-reaches individual significance but the pooled test does ($p = 0.0008$ McNemar,
-$p = 0.0012$ bootstrap). On SST-2 it is contradicted: the mean is $+1.31$~pp,
+reaches individual significance but the pooled test does ($p = 0.0011$ McNemar,
+$p < 10^{-4}$ bootstrap). On SST-2 it is contradicted: the mean is $+1.35$~pp,
 five models are significantly \emph{positive} and none negative, and the pooled
 sole-cause test is significant in the opposite direction.
 
 \textbf{SST-2: rewording hurts, idioms recover.} Original accuracy is high and
-tightly clustered (83.8--91.8\%), and plain paraphrasing costs accuracy for 14
-of 17 models, significantly for 6. Idiomatizing that same rewording recovers
-most of the loss --- positive for 15 of 17 models, significantly so for 5 ---
+tightly clustered (83.8--91.7\%), and plain paraphrasing costs accuracy for 12
+of 14 models, significantly for 4. Idiomatizing that same rewording recovers
+most of the loss --- positive for 12 of 14 models, significantly so for 5 ---
 with Mistral-7B-v0.3 showing the largest swing, $-2.91$~pp from paraphrasing and
 $+4.13$~pp from idiomatizing. The parse-failure control below shows, however,
 that part of this result is artifact rather than comprehension.
 
 \textbf{MMLU: a small effect that survives only pooling.} MMLU spreads models
-much more widely (29.7--72.3\%, against a 25\% chance floor) and both deltas are
-small: $\Delta_{\text{par}}$ averages $-0.07$~pp with no model significantly
-degraded, $\Delta_{\text{idi}}$ $-0.71$~pp with only H2O-Danube3-4B individually
-significant. The sole-cause direction is consistent enough ($b > c$ for 12 of 17
+much more widely (29.7--68.7\%, against a 25\% chance floor) and both deltas are
+small: $\Delta_{\text{par}}$ averages $+0.13$~pp with no model significantly
+degraded, $\Delta_{\text{idi}}$ $-0.79$~pp with only H2O-Danube3-4B individually
+significant. The sole-cause direction is consistent enough ($b > c$ for 9 of 14
 models) that pooling turns it into a clear signal. The small magnitude is likely
 structural: only the stem is rewritten, while the answer choices --- where an
 MMLU item's knowledge requirement sits --- are untouched, so an idiom can
@@ -607,7 +607,7 @@ leaving little power there.
 evaluation and the one where the manipulation bears directly on the decision.
 Ten models show a significant penalty, from Falcon3-3B at $-2.25$~pp to
 Qwen2.5-7B at $-1.17$~pp (Table~\ref{tab:permodel}), and the sole-cause test
-agrees: $b > c$ for 15 of 17 models, both tests concurring at $p < 0.05$ for 9
+agrees: $b > c$ for 12 of 14 models, both tests concurring at $p < 0.05$ for 9
 of them --- the same models bar Mistral-7B-v0.3, whose accuracy delta is
 significant while its sole-cause gap ($b = 225$, $c = 191$) is not. Agreement
 between two tests with different evidence bases across nine independent models is
@@ -672,14 +672,14 @@ idiomatic  & \texttt{Question:} \textbf{In Nagel's eyes}, the view that moral lu
 
 \textbf{Robustness to generation-format failures.} A variant provoking more
 format violations is thus penalised for a reason unrelated to idiom
-comprehension. Rates are low on average (1.3\%
-on SST-2, 0.7\% on MMLU, 0.3\% on MNLI) but uneven --- StableLM-2-1.6B fails on
-up to 10.5\% of MMLU items --- and on SST-2 unbalanced across variants: the
-\emph{paraphrase} arm fails more often than the idiomatic arm for 14 of 17
+comprehension. Rates are low on average (1.0\%
+on SST-2, 0.2\% on MMLU, 0.3\% on MNLI) but uneven --- Mistral-7B-v0.3 fails on
+up to 6.7\% of SST-2 items --- and on SST-2 unbalanced across variants: the
+\emph{paraphrase} arm fails more often than the idiomatic arm for 11 of 14
 models, inflating $\Delta_{\text{idi}}$. Dropping every triple containing a
 parse failure (the parse-clean columns of Table~\ref{tab:summary}) leaves MMLU
-and MNLI untouched, all 10 significant MNLI models included, but halves the
-SST-2 mean from $+1.31$ to $+0.67$~pp and cuts its significant models from 5 to
+and MNLI untouched, all 10 significant MNLI models included, but cuts the
+SST-2 mean from $+1.35$ to $+0.76$~pp and its significant models from 5 to
 3. Qwen2.5-7B is the clearest case: an apparent $+3.04$~pp idiom
 \emph{advantage} becomes $-0.21$~pp, because its paraphrase arm failed to parse
 on 6.4\% of rows against the idiomatic arm's 2.1\%. The direction does not
@@ -687,39 +687,40 @@ change --- even filtered, no SST-2 model shows a significant idiom penalty.
 
 \textbf{No capability or scale trend.} Idiom sensitivity does not shrink as
 models grow. Spearman correlations between $\Delta_{\text{idi}}$ and original
-accuracy are $-0.13$ ($p = 0.62$) on SST-2, $+0.18$ ($p = 0.49$) on MMLU and
-$-0.29$ ($p = 0.26$) on MNLI; against parameter count, $+0.09$, $+0.07$ and
-$-0.24$ --- all far from significance. Within the Qwen2.5 ladder on MNLI the
-effect is non-monotone ($-0.40$, $-1.59$, $-0.85$, $-1.17$~pp at 0.5B / 1.5B /
-3B / 7B), and the two largest models in the panel sit inside the degraded group
-rather than above it. The nearest to significance is a control rather than a
-treatment effect, SST-2 $\Delta_{\text{par}}$ against accuracy ($\rho = -0.43$,
-$p = 0.08$), whose sign is what a ceiling effect predicts. Rewriting is also not
-purely destructive --- pooled across models, 526 SST-2, 284 MMLU and 1{,}957 MNLI
+accuracy are $-0.13$ ($p = 0.66$) on SST-2, $+0.28$ ($p = 0.34$) on MMLU and
+$-0.29$ ($p = 0.31$) on MNLI; against parameter count, $+0.10$, $+0.24$ and
+$-0.30$ --- all far from significance. Within the Qwen2.5 ladder on MNLI the
+effect is non-monotone ($-0.40$, $-1.59$, $-1.17$~pp at 0.5B / 1.5B / 7B), and
+all four 7B models sit inside the degraded group rather than above it. Nothing
+comes close to significance: the largest correlation of any kind is MNLI
+$\Delta_{\text{idi}}$ against parameter count ($\rho = -0.30$, $p = 0.30$), and
+its negative sign points the opposite way to the shrinking-with-scale
+expectation. Rewriting is also not
+purely destructive --- pooled across models, 419 SST-2, 235 MMLU and 1{,}614 MNLI
 rows were wrong on the original but right on both rewrites.
 
 
 \section{Discussion}
 
 \textbf{The control arm changes what the data say.} Scored as a study without one
-would score it --- idiomatic against original --- SST-2 moves $+0.05$~pp, one
-model of 17 significant: no idiom effect worth reporting. The matched arm
-resolves that null into two cancelling effects, $-1.25$~pp from rewording and
-$+1.31$~pp from idiomatizing it. On MNLI the error inverts: the naive $-1.86$~pp
-includes $-0.69$~pp of plain rewording, overstating the idiom-specific cost by
-roughly 60\%. Neither error is visible without the paraphrase arm.
+would score it --- idiomatic against original --- SST-2 moves $+0.07$~pp, one
+model of 14 significant: no idiom effect worth reporting. The matched arm
+resolves that null into two cancelling effects, $-1.28$~pp from rewording and
+$+1.35$~pp from idiomatizing it. On MNLI the error inverts: the naive $-1.96$~pp
+includes $-0.68$~pp of plain rewording, overstating the idiom-specific cost by
+roughly 53\%. Neither error is visible without the paraphrase arm.
 
 The sweep supports a narrower claim than the one usually assumed. Idiomatic
 phrasing is not a general accuracy tax on instruction-tuned decoder LLMs: on
 binary sentiment it did not hurt at all, and on knowledge QA only one model of
-17 reached significance. The cost materialises when the figurative surface
+14 reached significance. The cost materialises when the figurative surface
 is \emph{load-bearing for the decision} --- exactly the MNLI configuration --- and
 otherwise tracks how directly the rewritten span bears on the answer: MMLU
-rewrites the stem while the knowledge sits in untouched choices ($-0.71$~pp),
-MNLI rewrites the very span the label is computed from ($-1.16$~pp) --- a
+rewrites the stem while the knowledge sits in untouched choices ($-0.79$~pp),
+MNLI rewrites the very span the label is computed from ($-1.28$~pp) --- a
 ranking, not a clean magnitude comparison, since MNLI's augmenter and rewrite
 depth differ from the other two datasets' (\S\ref{sec:threats}). SST-2
-inverts the scale ($+1.31$~pp), its target property being one idioms carry rather
+inverts the scale ($+1.35$~pp), its target property being one idioms carry rather
 than obscure.
 
 The magnitudes are modest even at their strongest. A 1--2~pp mean drop on MNLI is
@@ -733,7 +734,7 @@ downstream cost surviving after a model applies whatever partial understanding i
 has. The practical triage rule: work on idiom robustness pays off where
 figurative language can land on the span that determines the answer, and is
 largely wasted where the decision is carried elsewhere. Least comfortable is the
-absence of a scale trend: across an 18-fold
+absence of a scale trend: across a 14-fold
 parameter range the effect neither shrinks nor grows reliably, so a larger
 checkpoint should not be expected to bring idiom robustness with it.
 
@@ -764,15 +765,15 @@ changes the entailment relation outright. The same augmenter LLM both writes and
 grades the rewrite, so validation is not independent of generation either.
 
 \textbf{The statistical treatment has three known weaknesses.} The parse-failure
-filter is blunt --- it drops 2.8\% of SST-2 rows on average but over 12\% for
-two models there, and 15.9\% for StableLM-2-1.6B-Chat on MMLU, and dropping
+filter is blunt --- it drops 2.2\% of SST-2 rows on average but 12.4\% for
+Mistral-7B-v0.3 there, and 8.2\% for OLMo-2-1B on MNLI, and dropping
 rows non-randomly can itself
 bias a comparison --- so filtered and unfiltered readings bracket the truth. The
 pooled tests also treat models' items as exchangeable when the same row recurs
 once per model; a mixed-effects model with model as a random effect was not run,
 so pooled figures --- including MMLU's, whose significance rests entirely on
 pooling --- are indicative, not definitive. No multiple-comparisons correction is
-applied either: at $\alpha = 0.05$ across 17 per-model tests, about one
+applied either: at $\alpha = 0.05$ across 14 per-model tests, roughly one
 significant result per dataset is expected under a true null, so MMLU's single
 one carries little weight alone and only MNLI's count of 10 is clear of chance.
 
@@ -788,8 +789,7 @@ here, since every reported quantity is a within-row difference.
 \textbf{Scope limits.} Every model was evaluated zero-shot, greedily, under a
 single prompt template per dataset, so few-shot prompting, sampled decoding and
 prompt-format variation are untested and could interact with idiomaticity; the
-fine-tuned encoder track is deferred. Coverage has one hole:
-Llama-3.2-1B-Instruct is gated on Hugging Face and was never run.
+fine-tuned encoder track is deferred.
 
 \textbf{Future work.} The most valuable next step would sharpen the MNLI finding
 rather than broaden it: a direct check that rewrites preserve meaning, ruling

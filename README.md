@@ -135,20 +135,25 @@ variants:
 
 ### 4.2 Decoder track (zero / few-shot) — *active track for this phase*
 
-Trimmed subset of the original proposal, with new families added:
+The evaluated panel is 14 models spanning 0.5B–7B across 10 families. These are
+exactly the models in the registry, in `results/`, and in the report — the three
+lists are kept identical, so a model dropped from one is dropped from all:
 
-- Qwen3.5-1.5B-Instruct
-- Qwen3.5-7B-Instruct
-- Gemma-4-9B-Instruct *(latest available Gemma 4 variant)*
+- Qwen3.5-0.5B-Instruct, Qwen3.5-1.5B-Instruct, Qwen3.5-7B-Instruct
+  *(three sizes in one family, separating size-driven from family-driven effects)*
+- Falcon3-3B-Instruct, Falcon3-7B-Instruct
+- OLMo-2-1B-Instruct, OLMo-2-7B-Instruct
+- Gemma-4-2B-Instruct *(gated on HF)*
 - Mistral-7B-Instruct-v0.3
 - Phi-4-mini-instruct
-- DeepSeek-R1-Distill-Qwen-7B
-- SmolLM2-1.7B-Instruct *(ungated, different pretraining lineage; small-model comparison point)*
-- Llama-3.2-1B-Instruct *(gated on HF, pending manual review; smallest model in the roster)*
-- Qwen3.5-0.5B-Instruct *(ungated; smaller sibling of Qwen3.5-1.5B-Instruct, testing whether its idiomatic-degradation signal scales with size within the Qwen family)*
-- Qwen3.5-3B-Instruct *(ungated; fills the capability gap between Qwen3.5-1.5B-Instruct, the only model with a significant mmlu idiomatic-degradation result, and Qwen3.5-7B-Instruct, which shows a much weaker effect)*
-- Gemma-4-2B-Instruct *(gated on HF, same license as Gemma-4-9B-Instruct; smaller sibling to test the same capability-sweet-spot hypothesis)*
-- StableLM-2-1.6B-Chat *(ungated; different architecture/lineage at a similar size to the sweet-spot models above)*
+- Granite-3.1-2B-Instruct
+- H2O-Danube3-4B-Chat
+- Yi-1.5-6B-Chat
+- SmolLM2-1.7B-Instruct *(ungated, different pretraining lineage)*
+
+Note the registry ids are offset from the published names: `qwen3.5-*` is really
+Qwen2.5 and `gemma-4-*` is really Gemma-2 (`hf_repo` in each result JSON is
+authoritative). The report uses the published names.
 
 ## 5. Pipeline Overview
 

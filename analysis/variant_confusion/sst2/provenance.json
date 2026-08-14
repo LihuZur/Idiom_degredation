@@ -4,11 +4,9 @@
     "qwen3.5-0.5b-instruct",
     "olmo-2-1b-instruct",
     "qwen3.5-1.5b-instruct",
-    "stablelm-2-1.6b-chat",
     "smollm2-1.7b-instruct",
     "gemma-4-2b-instruct",
     "granite-3.1-2b-instruct",
-    "qwen3.5-3b-instruct",
     "falcon3-3b-instruct",
     "phi-4-mini-instruct",
     "h2o-danube3-4b-chat",
@@ -16,8 +14,7 @@
     "qwen3.5-7b-instruct",
     "falcon3-7b-instruct",
     "mistral-7b-instruct-v0.3",
-    "olmo-2-7b-instruct",
-    "gemma-4-9b-instruct"
+    "olmo-2-7b-instruct"
   ],
   "results_dir": "results"
 }

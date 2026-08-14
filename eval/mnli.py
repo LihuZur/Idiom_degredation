@@ -4,7 +4,7 @@ from typing import Any, ClassVar, Literal
 
 import eval.prompts.mnli as mnli_prompts
 from augmentation.base import AugmentedRow
-from eval.base import BaseEvaluator, reasoning_output_truncated, strip_reasoning_trace
+from eval.base import BaseEvaluator, strip_reasoning_trace
 from eval.registry import register_evaluator
 from models.base import FormattedInput
 
@@ -50,8 +50,6 @@ class MnliEvaluator(BaseEvaluator):
         )
 
     def parse(self, raw: str, ex: AugmentedRow) -> tuple[str | None, Literal["ok", "unparseable"]]:
-        if reasoning_output_truncated(raw, self.cfg.model):
-            return None, "unparseable"
         s = strip_reasoning_trace(raw).strip().lower()
         # R10: three label words, so resolve by an explicit earliest-index scan
         # rather than SST-2's two-way pairwise compare.

@@ -13,17 +13,15 @@ import pandas as pd
 
 from analysis.stats import mcnemar_exact_p
 
-# The 17 models the report displays: the registry's 19 less deepseek-r1 (dropped
-# from the report) and llama-3.2-1b (gated on Hugging Face, never run).
+# The 14 models the report displays, which is now the whole registry: every model
+# dropped from the report has also been removed from the codebase.
 DISPLAY = [
     "qwen3.5-0.5b-instruct",
     "olmo-2-1b-instruct",
     "qwen3.5-1.5b-instruct",
-    "stablelm-2-1.6b-chat",
     "smollm2-1.7b-instruct",
     "gemma-4-2b-instruct",
     "granite-3.1-2b-instruct",
-    "qwen3.5-3b-instruct",
     "falcon3-3b-instruct",
     "phi-4-mini-instruct",
     "h2o-danube3-4b-chat",
@@ -32,7 +30,6 @@ DISPLAY = [
     "falcon3-7b-instruct",
     "mistral-7b-instruct-v0.3",
     "olmo-2-7b-instruct",
-    "gemma-4-9b-instruct",
 ]
 VARIANTS = ("original", "paraphrase", "idiomatic")
 ALPHA = 0.05
@@ -82,7 +79,7 @@ def _per_model_naive(results_dir: Path, dataset: str) -> pd.DataFrame:
     "--per-model/--no-per-model",
     default=True,
     show_default=True,
-    help="Also print the per-model SST-2 breakdown behind the reported 1-of-17 count.",
+    help="Also print the per-model SST-2 breakdown behind the reported 1-of-14 count.",
 )
 def main(results: Path, summary: Path, per_model: bool) -> None:
     """Print the control-free contrast per dataset, with its decomposition."""

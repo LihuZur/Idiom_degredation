@@ -1,4 +1,4 @@
-# Configuration for Gemma 4 2B Instruct model (gated on HF; requires accepted license, same account as gemma-4-9b-instruct)
+# Configuration for Gemma 4 2B Instruct model (gated on HF; requires accepted license)
 model: gemma-4-2b-instruct
 seed: 0
 precision: bf16

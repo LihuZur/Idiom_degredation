@@ -75,9 +75,9 @@ def test_mmlu_parser() -> None:
         "<think>Option A looks wrong, Option B looks wrong too</think>\nThe correct answer is C.",
         ex,
     ) == ("2", "ok")
-    # a truncated <think> block with no closing tag falls back to the old
-    # first-occurrence-in-full-text behavior for non-reasoning models (unreliable,
-    # but this model isn't registered as a reasoning model so nothing changes)
+    # a truncated <think> block with no closing tag has nothing to strip, so parsing
+    # falls back to first-occurrence-in-full-text (unreliable, but no registered model
+    # emits a <think> block, so this case does not arise in a real run)
     assert evaluator.parse("<think>Option A is discussed here", ex) == ("0", "ok")
 
 
@@ -110,23 +110,6 @@ def test_mnli_parser() -> None:
     ) == ("2", "ok")
 
 
-def test_mnli_parser_reasoning_model_truncation() -> None:
-    cfg = EvalConfig(model="deepseek-r1-distill-qwen-7b")
-    evaluator = MnliEvaluator(cfg=cfg)
-    ex = make_dummy_ex()
-
-    # closed </think> block: parse the final answer as usual
-    assert evaluator.parse("<think>entailment looks wrong</think>\nThe answer is neutral.", ex) == (
-        "1",
-        "ok",
-    )
-
-    # no closing </think>: the model never stated a final answer, so "entailment"
-    # appearing inside the incomplete trace must not be parsed as the answer
-    assert evaluator.parse("<think>entailment seems likely", ex) == (None, "unparseable")
-    assert evaluator.parse("", ex) == (None, "unparseable")
-
-
 def test_mnli_format_includes_premise_and_hypothesis() -> None:
     cfg = EvalConfig(model="dummy-model")
     evaluator = MnliEvaluator(cfg=cfg)
@@ -141,38 +124,6 @@ def test_mnli_format_includes_premise_and_hypothesis() -> None:
 
     assert "The new rights are nice enough" in user
     assert "Everyone really likes the newest benefits" in user
-
-
-def test_mmlu_parser_reasoning_model_truncation() -> None:
-    cfg = EvalConfig(model="deepseek-r1-distill-qwen-7b")
-    evaluator = MmluEvaluator(cfg=cfg)
-    ex = make_dummy_ex()
-
-    # closed </think> block: parse the final answer as usual
-    assert evaluator.parse(
-        "<think>Option A looks wrong, Option B looks wrong too</think>\nThe correct answer is C.",
-        ex,
-    ) == ("2", "ok")
-
-    # no closing </think>: the model never reached its final answer, must be unparseable
-    # even though "A" appears in the (incomplete) reasoning trace
-    assert evaluator.parse("<think>Option A is discussed here", ex) == (None, "unparseable")
-    assert evaluator.parse("", ex) == (None, "unparseable")
-
-
-def test_sst2_parser_reasoning_model_truncation() -> None:
-    cfg = EvalConfig(model="deepseek-r1-distill-qwen-7b")
-    evaluator = Sst2Evaluator(cfg=cfg)
-    ex = make_dummy_ex()
-
-    # closed </think> block: parse the final answer as usual
-    assert evaluator.parse(
-        "<think>positive... no wait, negative</think>\nThe answer is positive.", ex
-    ) == ("1", "ok")
-
-    # no closing </think>: mentions "positive" while reasoning but never finishes
-    assert evaluator.parse("<think>positive seems likely", ex) == (None, "unparseable")
-    assert evaluator.parse("", ex) == (None, "unparseable")
 
 
 def test_score() -> None:

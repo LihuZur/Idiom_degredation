@@ -36,11 +36,9 @@ DISPLAY = {
     "qwen3.5-0.5b-instruct": "Qwen2.5-0.5B",
     "olmo-2-1b-instruct": "OLMo-2-1B",
     "qwen3.5-1.5b-instruct": "Qwen2.5-1.5B",
-    "stablelm-2-1.6b-chat": "StableLM-2-1.6B",
     "smollm2-1.7b-instruct": "SmolLM2-1.7B",
     "gemma-4-2b-instruct": "Gemma-2-2B",
     "granite-3.1-2b-instruct": "Granite-3.1-2B",
-    "qwen3.5-3b-instruct": "Qwen2.5-3B",
     "falcon3-3b-instruct": "Falcon3-3B",
     "phi-4-mini-instruct": "Phi-4-mini-3.8B",
     "h2o-danube3-4b-chat": "H2O-Danube3-4B",
@@ -49,15 +47,13 @@ DISPLAY = {
     "falcon3-7b-instruct": "Falcon3-7B",
     "mistral-7b-instruct-v0.3": "Mistral-7B-v0.3",
     "olmo-2-7b-instruct": "OLMo-2-7B",
-    "gemma-4-9b-instruct": "Gemma-2-9B",
 }
 ORDER = list(DISPLAY)  # already ascending in parameter count
 
-# deepseek-r1-distill-qwen-7b is excluded from the report. Its result files and
-# per-model variant_confusion artifacts still exist on disk; leaving it out of
-# DISPLAY is what drops it from both tables. The pooled sole-cause numbers read
-# below must therefore come from a variant_confusion run over these 17 models
-# only -- re-run scripts.variant_confusion with this --model list if in doubt.
+# DISPLAY is the full registry: every model dropped from the report has also been
+# removed from the codebase, along with its result and variant_confusion artifacts.
+# The pooled sole-cause numbers read below therefore already cover exactly these
+# 14 models.
 
 
 ALPHA = 0.05
@@ -244,11 +240,13 @@ Dataset & Models & $n$ & $\Delta_{\text{par}}$ & $\Delta_{\text{idi}}$ & sig.
         r"""\begin{table}[t]
 \centering
 \caption{Per-model $\Delta_{\text{idi}}$ (pp) on each dataset, ordered by
-parameter count and split into two panels. \textbf{Bold} marks
-$\Delta_{\text{idi}}$ significant at $p < 0.05$ (McNemar exact); $\dagger$ marks
-models whose sole-cause gap between $b$ and $c$ is significant on \emph{both}
-the McNemar and bootstrap tests, in whichever direction.
-Negative values support the hypothesis that idiomatic phrasing costs
+parameter count and split into two panels. The two marks are independent and
+flag different quantities, so a cell may carry either, both or neither.
+\textbf{Bold} says the printed $\Delta_{\text{idi}}$ is itself significant
+($p < 0.05$, McNemar exact). $\dagger$ says nothing about that number: it flags
+the separate sole-cause diagnostic for the same cell, where the $b$ versus $c$
+gap is significant on \emph{both} the McNemar and bootstrap tests, in either
+direction. Negative values support the hypothesis that idiomatic phrasing costs
 accuracy beyond paraphrasing; note that the SST-2 columns are almost entirely
 positive.}
 \label{tab:permodel}

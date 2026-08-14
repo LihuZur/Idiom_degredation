@@ -1,20 +1,20 @@
-# McNemar significance report — pooled (17 models)
+# McNemar significance report — pooled (14 models)
 
 ## What is being compared
 
-Restricting to the 18445 items where this pooled set of models answered
+Restricting to the 15190 items where this pooled set of models answered
 the **original** variant correctly, we compare whether the **paraphrase** or the **idiomatic**
 rewrite of that same item broke the answer, while the other rewrite did not:
 
 |                        | idiomatic WRONG | idiomatic right |
 |------------------------|------------------|------------------|
-| **paraphrase WRONG**   | (both broke it — excluded from the test) | c = 468 |
-| **paraphrase right**   | b = 578 | (both fine — excluded from the test) |
+| **paraphrase WRONG**   | (both broke it — excluded from the test) | c = 378 |
+| **paraphrase right**   | b = 474 | (both fine — excluded from the test) |
 
 Only the *discordant* cells (b, c) — where exactly one rewrite broke an otherwise-correct
 answer — enter McNemar's test. The concordant cells (both right / both wrong) carry no
 information about which rewrite is worse, so they are excluded, as in any paired McNemar test.
-For reference, `original_only_wrong` = 284 (cases where the original itself was wrong
+For reference, `original_only_wrong` = 235 (cases where the original itself was wrong
 but both rewrites were correct) is reported separately and does not enter this test.
 
 ## Test statistic
@@ -47,11 +47,11 @@ for paired 2x2 designs, especially with small counts.
 
 ## Result
 
-- b (idiomatic-only-wrong) = 578
-- c (paraphrase-only-wrong) = 468
-- n = b + c = 1046
-- chi2 = 11.359, df = 1
-- p-value = 0.00075
+- b (idiomatic-only-wrong) = 474
+- c (paraphrase-only-wrong) = 378
+- n = b + c = 852
+- chi2 = 10.593, df = 1
+- p-value = 0.00114
 
 ## Non-parametric bootstrap check
 
@@ -64,14 +64,14 @@ sampling distribution with no assumption of normality/chi-square, from which we 
 percentile confidence interval and a two-sided empirical p-value (the fraction of resamples
 landing on the opposite side of zero from the observed difference, doubled).
 
-- observed diff (b - c) = 110
-- 95% bootstrap CI = [48, 174]
-- bootstrap p-value = 0.00120 (n_boot=10000)
+- observed diff (b - c) = 96
+- 95% bootstrap CI = [37, 153]
+- bootstrap p-value = 0.00000 (n_boot=10000)
 
 ## Conclusion
 
-**Statistically significant at alpha=0.05** (p=0.00075 < 0.05): the **idiomatic** rewrite broke a previously-correct answer more often than the **paraphrase** rewrite did (b=578 vs c=468). This supports the research hypothesis that idiomatic phrasing degrades accuracy more than plain paraphrasing.
+**Statistically significant at alpha=0.05** (p=0.00114 < 0.05): the **idiomatic** rewrite broke a previously-correct answer more often than the **paraphrase** rewrite did (b=474 vs c=378). This supports the research hypothesis that idiomatic phrasing degrades accuracy more than plain paraphrasing.
 
 **Pooling caveat:** this pooled test naively sums discordant-pair counts across multiple models. It is *not* a rigorous mixed-effects test (the models are not strictly exchangeable independent draws) — treat it as indicative, not definitive.
 
-The bootstrap check **agrees**: its 95% CI on (idiomatic_only minus paraphrase_only) is [48, 174], which excludes zero, and its empirical p-value (0.00120) is also below alpha=0.05.
+The bootstrap check **agrees**: its 95% CI on (idiomatic_only minus paraphrase_only) is [37, 153], which excludes zero, and its empirical p-value (0.00000) is also below alpha=0.05.
