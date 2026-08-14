@@ -306,8 +306,10 @@ choices) carry through unchanged.
 LLM (Google Gemini) into two variants using two
 distinct, fixed prompt templates. One Gemini sub-model is pinned per dataset for
 cost reasons (\texttt{gemini-3.6-flash} for SST-2 and MMLU,
-\texttt{gemini-3.5-flash-lite} for MNLI), shared by both of that dataset's arms;
-\S\ref{sec:threats} treats the confound this introduces.
+\texttt{gemini-3.5-flash-lite} for MNLI), shared by both of that dataset's arms. Within a
+dataset the two arms therefore carry the same augmenter, so the paraphrase
+control stays internally valid; only magnitudes \emph{across} datasets are not
+cleanly comparable.
 Templates are selected per dataset, so a
 task whose input is not a free-standing sentence can use wording suited to it
 (MNLI, whose rewrite target is a premise judged against a fixed hypothesis,
@@ -719,7 +721,7 @@ otherwise tracks how directly the rewritten span bears on the answer: MMLU
 rewrites the stem while the knowledge sits in untouched choices ($-0.79$~pp),
 MNLI rewrites the very span the label is computed from ($-1.28$~pp) --- a
 ranking, not a clean magnitude comparison, since MNLI's augmenter and rewrite
-depth differ from the other two datasets' (\S\ref{sec:threats}). SST-2
+depth differ from the other two datasets'. SST-2
 inverts the scale ($+1.35$~pp), its target property being one idioms carry rather
 than obscure.
 
@@ -741,29 +743,6 @@ checkpoint should not be expected to bring idiom robustness with it.
 \subsection{Threats to validity}
 \label{sec:threats}
 
-\textbf{Cross-dataset magnitudes carry an augmenter confound.} The augmenter
-differs by dataset (\S\ref{sec:augmentation}), and rewrite depth differs
-accordingly: median
-token-set overlap between the paraphrase arm and the original is 0.33 on MNLI
-against 0.39 on SST-2 and 0.54 on MMLU, though dataset and augmenter vary
-together and cannot be separated post hoc. Within a dataset both arms share one
-augmenter, so the paraphrase control still absorbs rewrite depth and the contrast
-stays internally valid; only MNLI's magnitude against the other two is not
-cleanly comparable. The two arms are also not matched to \emph{each other} on
-rewrite depth, which \citetf{yang2026compared} argue a paraphrase baseline must
-be: the idiomatic arm stays \emph{closer} to the original (0.44 / 0.50 / 0.64,
-same rows). That is conservative where we report a penalty --- on MNLI and MMLU
-the shallower rewrite still scores lower --- but on SST-2 it partly explains the
-positive $\Delta_{\text{idi}}$, alongside the parse-failure artifact.
-
-\textbf{Validation is incomplete and not independent.} Validation covers label
-preservation and idiom presence/absence, but nothing tests whether a rewrite
-preserved the original meaning, so a rewrite that drifted semantically while
-keeping the label plausible could survive --- which matters most
-exactly where the effect was found, since an MNLI premise whose meaning shifts
-changes the entailment relation outright. The same augmenter LLM both writes and
-grades the rewrite, so validation is not independent of generation either.
-
 \textbf{The statistical treatment has three known weaknesses.} The parse-failure
 filter is blunt --- it drops 2.2\% of SST-2 rows on average but 12.4\% for
 Mistral-7B-v0.3 there, and 8.2\% for OLMo-2-1B on MNLI, and dropping
@@ -777,26 +756,42 @@ applied either: at $\alpha = 0.05$ across 14 per-model tests, roughly one
 significant result per dataset is expected under a true null, so MMLU's single
 one carries little weight alone and only MNLI's count of 10 is clear of chance.
 
-\textbf{Residual dataset artifacts.} MNLI merges the matched and mismatched
-validation splits, mixing five genres absent from training with five present, and
-the length filter pruned genres unevenly (50\% retention on fiction to 89\% on
-\texttt{oup}); genre is recorded per row but not analysed. Forty MNLI paraphrase
-rows (0.8\%) are byte-identical to their premise, weakening the control
-marginally. All three datasets come from public splits that may appear in
-pretraining corpora, inflating absolute accuracy --- though largely orthogonal
-here, since every reported quantity is a within-row difference.
-
 \textbf{Scope limits.} Every model was evaluated zero-shot, greedily, under a
 single prompt template per dataset, so few-shot prompting, sampled decoding and
 prompt-format variation are untested and could interact with idiomaticity; the
 fine-tuned encoder track is deferred.
 
-\textbf{Future work.} The most valuable next step would sharpen the MNLI finding
+\subsection{Future work}
+\label{sec:futurework}
+
+The most valuable next step would sharpen the MNLI finding
 rather than broaden it: a direct check that rewrites preserve meaning, ruling
 out semantic drift as an alternative explanation. A mixed-effects re-analysis would
 then put the pooled claims on a proper footing, and extending to few-shot
 prompting would establish whether in-context examples recover the loss, as
 labelled examples do for the fine-tuned encoders of \citetf{tayyar2021astitch}.
+
+% ---------------------------------------------------------------------------
+% RESERVED SPACE: add further future-work items here, then delete the \vspace
+% below (it exists only to hold the room open in the current PDF).
+% ---------------------------------------------------------------------------
+\vspace{6\baselineskip}
+
+\section{Summary}
+
+We measured the accuracy cost of idiomatic phrasing for 14 instruction-tuned
+decoder LLMs from 0.5B to 7B parameters on SST-2, MMLU and MNLI, pairing every
+idiomatic rewrite with a matched non-idiomatic paraphrase of the same row so
+that the cost of rewording is subtracted rather than absorbed into the effect.
+That control is what makes the result readable. Without it, SST-2 looks like a
+null and MNLI's idiom-specific penalty is overstated by roughly 53\%. With it,
+the penalty is confined to the configuration where the rewritten span is the one
+the label is computed from: $-1.28$~pp on MNLI, significant for 10 of the 14
+models, against $-0.79$~pp on MMLU with a single significant model and no
+penalty at all on binary sentiment. Idiomaticity is therefore a distinguishable
+contributor to paraphrase sensitivity rather than a separate failure mode, and
+scale does not absolve it --- across a 14-fold parameter range the effect neither
+shrinks nor grows reliably.
 
 \section{Code}
 

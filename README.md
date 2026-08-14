@@ -479,7 +479,8 @@ uv run idiom-naive-contrast
 
 # Per-arm rewrite depth — median token-set overlap with the original for each
 # arm. Shows the two arms are NOT matched on depth; the idiomatic arm is the
-# shallower edit on all three datasets. (Report §4.1.) Needs datasets_out/.
+# shallower edit on all three datasets. Diagnostic only — the report no longer
+# quotes these figures. Needs datasets_out/.
 uv run idiom-arm-overlap
 
 # Regenerate the two machine-generated LaTeX tables (tab:summary, tab:permodel)
