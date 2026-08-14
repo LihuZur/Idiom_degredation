@@ -382,7 +382,7 @@ Removal is symmetric: delete the file and any configs that reference it.
 - Any future addition to this list requires a note here explaining why HF
   was insufficient.
 
-## 10. How to Run *(placeholder — implemented in later phases)*
+## 10. How to Run
 
 All commands assume the project env is active (`uv sync` once, then either
 `source .venv/bin/activate` or prefix each command with `uv run`).
@@ -462,6 +462,26 @@ uv run idiom-plot-summary \
 #   analysis/tables/cross_dataset_summary.{csv,md} (+ .meta.json)
 #   analysis/figures/cross_dataset_summary_significant.html  (filtered cut, see below)
 #   analysis/tables/cross_dataset_summary_significant.{csv,md} (+ .meta.json)
+
+# Report derivations — every number in the report that is not in a Stage 4 table
+# comes from one of these three. All read committed artifacts only; each needs
+# analysis/tables/summary.csv (idiom-analyze above) to exist first.
+
+# The control-free contrast: what a study with no paraphrase arm would have
+# reported. Asserts its recomputed accuracies against summary.csv, so it fails
+# loudly rather than printing stale numbers. (Report §4 opener.)
+uv run idiom-naive-contrast
+
+# Per-arm rewrite depth — median token-set overlap with the original for each
+# arm. Shows the two arms are NOT matched on depth; the idiomatic arm is the
+# shallower edit on all three datasets. (Report §4.1.) Needs datasets_out/.
+uv run idiom-arm-overlap
+
+# Regenerate the two machine-generated LaTeX tables (tab:summary, tab:permodel)
+# → analysis/tables/t_summary.tex, analysis/tables/t_permodel.tex
+# Paste each over the matching table block in main.tex, matched by \label.
+# Never hand-edit those blocks in main.tex — edit this generator instead.
+uv run idiom-report-tables
 ```
 
 ### The `_significant` cut

@@ -40,6 +40,9 @@ idiom-analyze = "scripts.analyze:main"
 idiom-plot-dataset = "scripts.plot_dataset:main"
 idiom-plot-summary = "scripts.plot_summary:main"
 idiom-variant-confusion = "scripts.variant_confusion:main"
+idiom-naive-contrast = "scripts.naive_contrast:main"
+idiom-arm-overlap = "scripts.arm_overlap:main"
+idiom-report-tables = "scripts.gen_report_tables:main"
 
 [dependency-groups]
 dev = [
