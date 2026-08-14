@@ -92,6 +92,17 @@ def main(
         click.echo(f"Wrote {out_dir / 'tables' / f'{ds}_cross_model.md'}")
         click.echo(f"Wrote {out_dir / 'tables' / f'{ds}_cross_model.meta.json'}")
 
+        # The `_significant` cut is only written when at least one model on
+        # this dataset has a delta CI clear of zero, so report what actually
+        # landed rather than assuming it did.
+        sig_html = out_dir / "figures" / f"{ds}_cross_model_significant.html"
+        if sig_html.exists():
+            click.echo(f"Wrote {sig_html}")
+            for suffix in ("csv", "md", "meta.json"):
+                click.echo(f"Wrote {out_dir / 'tables' / f'{ds}_cross_model_significant.{suffix}'}")
+        else:
+            click.echo(f"No model on {ds} has a delta CI clear of zero — no _significant cut.")
+
 
 if __name__ == "__main__":
     main()

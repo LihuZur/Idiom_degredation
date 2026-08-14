@@ -70,6 +70,18 @@ def main(
     click.echo(f"Wrote {out_dir / 'tables' / 'cross_dataset_summary.md'}")
     click.echo(f"Wrote {out_dir / 'tables' / 'cross_dataset_summary.meta.json'}")
 
+    # The `_significant` cut is only written when at least one run has a delta
+    # CI clear of zero, so report what actually landed rather than assuming.
+    sig_html = out_dir / "figures" / "cross_dataset_summary_significant.html"
+    if sig_html.exists():
+        click.echo(f"Wrote {sig_html}")
+        for suffix in ("csv", "md", "meta.json"):
+            click.echo(
+                f"Wrote {out_dir / 'tables' / f'cross_dataset_summary_significant.{suffix}'}"
+            )
+    else:
+        click.echo("No run has a delta CI clear of zero — no _significant cut.")
+
 
 if __name__ == "__main__":
     main()

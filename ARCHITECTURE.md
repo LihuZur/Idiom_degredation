@@ -341,6 +341,12 @@ def run_stage3(dataset: str, model_id: str) -> Path:
     (supports `--all` to run every dataset with a `results/{dataset}/`
     folder).
   - `idiom-plot-summary` — cross-dataset summary figure + companion table.
+- Both plotting CLIs additionally emit a `*_significant` copy of each figure
+  and companion table, filtered by `_has_resolved_delta()` to the runs where
+  Δ<sub>paraphrase</sub> **or** Δ<sub>idiom</sub> has a CI that does not cross
+  zero. The cut is skipped (no files written) when no run qualifies, so a
+  missing `_significant` artifact means "nothing resolved", not "step
+  skipped".
 - Reads **Stage 3 result files only** (`results/{dataset}/{model}.json`), so
   it is independently re-runnable without touching any earlier stage.
 - **Fails loudly** if a model's result set is missing any of the three

@@ -419,11 +419,13 @@ uv run idiom-eval \
 
 # Stage 4 — Visualize: three flags-only CLIs, no --config file.
 # Bootstrap params (--n-resamples, --ci, --seed) are shared across all three.
+# --out-dir is the *root*: each CLI appends `tables/` and `figures/` itself,
+# so pass `analysis/` — not `analysis/tables/` or `analysis/figures/`.
 
 # Aggregate every result file into one summary table (tables only, no figures)
 uv run idiom-analyze \
     --results results/ \
-    --out-dir analysis/tables/ \
+    --out-dir analysis/ \
     --n-resamples 10000 \
     --ci 0.95 \
     --seed 0 \
@@ -435,28 +437,55 @@ uv run idiom-analyze \
 uv run idiom-plot-dataset \
     --dataset sst2 \
     --results results/ \
-    --out-dir analysis/figures/ \
+    --out-dir analysis/ \
     --n-resamples 10000 \
     --ci 0.95 \
     --seed 0 \
     --force
 # → analysis/figures/sst2_cross_model.html
 #   analysis/tables/sst2_cross_model.{csv,md} (+ .meta.json)
+#   analysis/figures/sst2_cross_model_significant.html      (filtered cut, see below)
+#   analysis/tables/sst2_cross_model_significant.{csv,md} (+ .meta.json)
 
 # Or every dataset with a result folder, in one pass
-uv run idiom-plot-dataset --all --results results/ --out-dir analysis/figures/
+uv run idiom-plot-dataset --all --results results/ --out-dir analysis/
 
 # Cross-dataset summary chart — grouped delta bars across all datasets & models
 uv run idiom-plot-summary \
     --results results/ \
-    --out-dir analysis/figures/ \
+    --out-dir analysis/ \
     --n-resamples 10000 \
     --ci 0.95 \
     --seed 0 \
     --force
 # → analysis/figures/cross_dataset_summary.html
 #   analysis/tables/cross_dataset_summary.{csv,md} (+ .meta.json)
+#   analysis/figures/cross_dataset_summary_significant.html  (filtered cut, see below)
+#   analysis/tables/cross_dataset_summary_significant.{csv,md} (+ .meta.json)
 ```
+
+### The `_significant` cut
+
+Both plotting CLIs emit a second, filtered copy of every figure and companion
+table alongside the full one. The filter keeps a run only when
+Δ<sub>paraphrase</sub> **or** Δ<sub>idiom</sub> has a bootstrap confidence
+interval that does **not** cross zero — i.e. the sign of the effect is
+resolved by the data rather than being consistent with "no change". Runs where
+both intervals straddle zero are dropped.
+
+The cut is written only if at least one run survives; when nothing does, the
+CLI says so and no `_significant` files are produced (so a missing file means
+"nothing resolved", never "this step did not run"). On the current results:
+
+| Dataset | Models | Survive the cut |
+|---------|-------:|----------------:|
+| sst2    | 17     | 8               |
+| mmlu    | 17     | 1               |
+| mnli    | 17     | 13              |
+
+In the **unfiltered** figures the same distinction is drawn rather than
+filtered: a delta bar whose CI clears zero is solid and marked `*`, one that
+straddles zero is faded.
 
 ## 11. Risks & Mitigations
 
