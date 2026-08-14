@@ -98,9 +98,10 @@ not have a natural idiom inserted while preserving the entailment relation.
 > **Known limitation — MNLI uses a different augmenter.** SST-2 and MMLU were
 > built with `gemini-3.6-flash`; MNLI uses `gemini-3.5-flash-lite`. MNLI is the
 > only uncapped dataset (~5.1k rows × 6 calls vs MMLU's 1.1k), so Stage 2 runtime
-> mattered here and nowhere else. On a 100-row gate flash-lite was faster per call
-> and produced *deeper* rewrites — median token-overlap with the original of 0.414
-> vs 0.571 — at a lower validation-failure rate. Rebuilding the other two datasets
+> mattered here and nowhere else. Flash-lite was faster per call and produced
+> *deeper* rewrites: median token-set overlap with the original is 0.33 on MNLI
+> against 0.39 on SST-2 and 0.54 on MMLU, though dataset and augmenter vary
+> together and cannot be separated post hoc. Rebuilding the other two datasets
 > on it would have invalidated their warm caches for no research benefit. The
 > asymmetry is nonetheless real: cross-dataset comparisons carry an augmenter
 > difference as well as a task difference.
@@ -207,9 +208,9 @@ augmented CSVs using two fixed prompt templates plus the validators:
 - `datasets_out/{dataset}/paraphrase.csv` — reworded, **no idioms**.
 - `datasets_out/{dataset}/idiomatic.csv` — reworded, **with idioms**.
 
-Validators filter augmented rows for (a) semantic similarity to the original,
-(b) label preservation, and (c) idiom presence / absence for the correct
-variant. `id` and `y` are preserved so all three CSVs align row-for-row.
+Validators filter augmented rows for (a) label preservation and (b) idiom
+presence / absence for the correct variant. `id` and `y` are preserved so all
+three CSVs align row-for-row.
 
 The augmentation prompt should also contain the label `y` so that the rephrasing does not change the task results.
 
@@ -461,7 +462,7 @@ uv run idiom-plot-summary \
 
 | Risk | Mitigation |
 |------|------------|
-| Augmentation LLM changes semantics or flips labels | Validators: semantic-similarity threshold + label-preservation check + prompt contains the labels as well |
+| Augmentation LLM changes semantics or flips labels | Validators: label-preservation check + prompt contains the labels as well. **Not** mitigated: semantic drift that preserves the label — there is no similarity gate (§13) |
 | "Idiomatic" rewrite contains no real idioms | Idiom-presence check (idiom list and/or LLM judge) |
 | "Paraphrase" rewrite accidentally uses idioms | Idiom-absence check on control variant |
 | Compute budget for larger decoders | Trimmed model list per admin; batching, vLLM, quantization where safe |

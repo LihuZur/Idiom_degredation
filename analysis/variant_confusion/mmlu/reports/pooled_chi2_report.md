@@ -65,8 +65,8 @@ percentile confidence interval and a two-sided empirical p-value (the fraction o
 landing on the opposite side of zero from the observed difference, doubled).
 
 - observed diff (b - c) = 110
-- 95% bootstrap CI = [47, 173]
-- bootstrap p-value = 0.00160 (n_boot=10000)
+- 95% bootstrap CI = [48, 174]
+- bootstrap p-value = 0.00120 (n_boot=10000)
 
 ## Conclusion
 
@@ -74,4 +74,4 @@ landing on the opposite side of zero from the observed difference, doubled).
 
 **Pooling caveat:** this pooled test naively sums discordant-pair counts across multiple models. It is *not* a rigorous mixed-effects test (the models are not strictly exchangeable independent draws) — treat it as indicative, not definitive.
 
-The bootstrap check **agrees**: its 95% CI on (idiomatic_only minus paraphrase_only) is [47, 173], which excludes zero, and its empirical p-value (0.00160) is also below alpha=0.05.
+The bootstrap check **agrees**: its 95% CI on (idiomatic_only minus paraphrase_only) is [48, 174], which excludes zero, and its empirical p-value (0.00120) is also below alpha=0.05.
