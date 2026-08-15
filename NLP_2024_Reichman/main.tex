@@ -25,13 +25,14 @@
   pdfsubject = {NLP course final project report, Reichman University},
 }
 \usepackage{parskip}
-\setlength{\parskip}{0.42\baselineskip}
-% Tighter section headings and lists, and smaller footnotes/bibliography, to
-% keep the report within its page budget without dropping content.
-\usepackage[small,compact]{titlesec}
+\setlength{\parskip}{0.6\baselineskip}
+% Headings get room to breathe; lists and captions are spaced to match.
+\usepackage[small]{titlesec}
+\titlespacing*{\section}{0pt}{1.2\baselineskip}{0.5\baselineskip}
+\titlespacing*{\subsection}{0pt}{0.9\baselineskip}{0.35\baselineskip}
 \usepackage{enumitem}
-\setlist{topsep=0.2\baselineskip, itemsep=0.15\baselineskip, parsep=0pt}
-\usepackage[font=small,labelfont=bf,skip=4pt]{caption}
+\setlist{topsep=0.3\baselineskip, itemsep=0.25\baselineskip, parsep=0pt}
+\usepackage[font=small,labelfont=bf,skip=6pt]{caption}
 \usepackage[hang,flushmargin]{footmisc}
 \setlength{\footnotesep}{0.35\baselineskip}
 \renewcommand{\footnotelayout}{\scriptsize}
@@ -70,6 +71,7 @@
 \shortref{hewitt2019control}  {Designing and Interpreting Probes with Control Tasks, EMNLP-IJCNLP}
 \shortref{yang2026compared}   {Compared to What? Baselines and Metrics for Counterfactual Prompting, preprint}
 \shortref{ziems2022value}     {VALUE: Understanding Dialect Disparity in NLU, ACL}
+\shortref{hashiloni2026idiolink}{IdioLink: Retrieving Meaning Beyond Words Across Idiomatic and Literal Expressions, preprint}
 % Falls back to the bare citation if a key has no short form registered.
 \newcommand{\fn@short}[1]{%
   \footnote{\citep{#1} \citeauthor{#1} (\citeyear{#1})%
@@ -104,124 +106,100 @@ A Controlled Study Across Instruction-Tuned Decoder Models}
 \section{Introduction}
 \label{sec:intro}
 
-Idiomatic expressions --- those whose meaning cannot be derived
-compositionally from their individual words, e.g., \emph{``spill the beans''} or
-\emph{``par for the course''} --- are routinely treated in NLP as a harder case
-for language models than direct, literal phrasing. The premise is intuitive:
-idioms are culturally specific and non-compositional, so a model must have
-learned an expression rather than derived it, and models do degrade on
-expressions they have not seen \citepf{tayyar2021astitch}. It is, however, rarely tested
-\emph{in isolation}: any two rewordings of a sentence already differ lexically and
-syntactically, so an observed accuracy drop after ``idiomatizing'' it could simply
-be an artifact of rewording in general.
+Idiomatic expressions, whose meaning cannot be derived compositionally from
+their individual words (e.g., \emph{``spill the beans''} or \emph{``par for the
+course''}), are routinely treated in NLP as a harder case for language models
+than direct, literal phrasing. The premise is intuitive: idioms are culturally
+specific and non-compositional, so a model must have learned an expression
+rather than derived it, and models do degrade on expressions they have not seen
+\citepf{tayyar2021astitch}. It is rarely tested \emph{in isolation}, though.
+Any two rewordings of a sentence differ lexically and syntactically, so a drop
+after ``idiomatizing'' one could be an artifact of rewording in general.
 
 \textbf{Central research question:} does phrasing a task input
 idiomatically cause a measurable degradation in a language model's task
 accuracy, \emph{over and above} the degradation that any comparable
 paraphrase (a non-idiomatic rewording) already causes?
 
-To answer this cleanly, we rewrite every original example $x$ into two controlled
-variants that share the same rewriting budget but differ in exactly one property:
-$x_{\text{paraphrase}}$, reworded \textbf{without} idioms, the \emph{control}
-condition isolating the effect of rewording alone; and $x_{\text{idiomatic}}$,
-reworded \textbf{with} one or more natural idiomatic expressions and the same
-meaning. The label $y$ is given to the rewriter and re-checked afterwards,
-failures being dropped rather than relabelled (\S\ref{sec:augmentation}), and
-each variant is evaluated under an identical
-prompt template, so only the input's surface form changes between runs.
-The question matters practically wherever informal text reaches a classifier
-rather than being authored for one --- review and social-media sentiment,
-support-ticket triage, content moderation --- because there figurative phrasing
-is a property of the incoming data rather than a choice the system can make;
-SST-2's own snippets are already partly figurative before any rewriting
-(\S\ref{sec:datasets}). If idiomaticity has an
-isolable negative effect, that bears on prompt engineering, augmentation
-strategy, and robustness evaluation; if apparent idiom failures are merely
-generic paraphrase sensitivity, effort spent specifically on idiom handling is
-misplaced relative to general robustness-to-rewording work.
+We rewrite every original example $x$ into two variants sharing a rewriting
+budget but differing in one property: $x_{\text{paraphrase}}$, reworded
+\textbf{without} idioms, and $x_{\text{idiomatic}}$, reworded \textbf{with}
+them. The label $y$ is given to the rewriter and re-checked afterwards, failures
+being dropped rather than relabelled (\S\ref{sec:augmentation}), and each
+variant is evaluated under an identical prompt template.
+
+The answer decides where effort should go. Figurative phrasing is a property of
+the incoming data wherever informal text reaches a classifier rather than being
+authored for one: review sentiment, ticket triage, content moderation. If
+idiomaticity has an isolable effect there, that bears on prompt engineering,
+augmentation and robustness evaluation; if idiom failures are merely generic
+paraphrase sensitivity, work specific to idioms is misplaced.
 
 \textbf{Contributions.} We contribute (i) the paraphrase-controlled design
-described above, which isolates the idiom-specific effect from the generic cost
-of rewording --- instantiating for a linguistic property the control-condition
-logic concurrent work establishes in general \citepf{yang2026compared}, and
-finding a residual that survives its baseline on inference, unlike that
-demographic case;
-(ii) a \emph{sole-cause} diagnostic
-that, restricted to items a model already answers correctly, identifies which
-single rewrite is responsible when exactly one of the two flips the answer;
-(iii) dual significance testing, pairing a continuity-corrected McNemar test
-with a non-parametric bootstrap under different assumptions, guarding against
-the chi-square approximation on small discordant-pair counts; (iv) breadth --- 14
-instruction-tuned decoder LLMs from 0.5B to 7B across 10 families, on three
-datasets spanning sentiment, knowledge QA and inference, for 42 runs with a
-pooled cross-model test per dataset; and (v) a reproducible four-stage pipeline
-with LLM-judge validation of every augmented example and per-artifact provenance
-(\S\ref{sec:methodology}).
+above, instantiating for a linguistic property the control-condition logic
+concurrent work establishes in general \citepf{yang2026compared}; (ii) a
+\emph{sole-cause} diagnostic that, restricted to items a model already answers
+correctly, identifies which single rewrite is responsible when exactly one of
+the two flips the answer; (iii) dual significance testing, pairing
+continuity-corrected McNemar with a non-parametric bootstrap; (iv) breadth, 14
+instruction-tuned decoder LLMs from 0.5B to 7B across 10 families on three
+datasets, for 42 runs with a pooled cross-model test per dataset; and (v) a
+reproducible four-stage pipeline with LLM-judge validation of every augmented
+example and per-artifact provenance (\S\ref{sec:methodology}).
 
 \subsection{Related Work}
 
-\textbf{Idiom processing in NLP.} Prior work has mostly focused on
-\emph{detecting} or \emph{translating} idioms rather than measuring their effect
-on downstream accuracy. \citetf{tayyar2021astitch} probe pretrained models on the
-literal-versus-idiomatic distinction, finding they do reasonably well given one or
+\textbf{Idiom processing in NLP.} \citetf{tayyar2021astitch} probe pretrained
+models on the literal-versus-idiomatic distinction, finding they do well given
 a few labelled examples per expression but degrade substantially zero-shot on
-unseen expressions, and \citetf{chakrabarty2022flute} introduce FLUTE, a
-9{,}000-instance figurative-language benchmark spanning idioms, similes,
-metaphors, and sarcasm. The LLM era has largely inherited this framing:
-\citetf{phelps2024sign} find prompted LLMs competitive but still short of
-fine-tuned task-specific models on three idiomaticity datasets even at GPT-4
-scale, and \citetf{mi2025dice} show with a controlled contrastive dataset that
-LLMs frequently fail to resolve idiomaticity when doing so depends on context,
-arguing that headline benchmark success may rest on reasoning shortcuts. All of
-this measures idiom \emph{comprehension} --- establishing it as a genuine weak
-point --- rather than what idiomatic phrasing costs on a task that is not itself
+unseen ones, and \citetf{chakrabarty2022flute} introduce FLUTE, a
+9{,}000-instance figurative-language benchmark. The LLM era inherited this
+framing: \citetf{phelps2024sign} find prompted LLMs short of fine-tuned models
+even at GPT-4 scale, and \citetf{mi2025dice} show LLMs failing to resolve
+idiomaticity when doing so depends on context. The weakness appears outside
+classification too: \citetf{hashiloni2026idiolink} introduce IdioLink, a
+retrieval benchmark of 2{,}140 queries over 107 idioms, and find embedding
+models matching on surface form instead of linking an idiom to a literal
+paraphrase of the same meaning. All of this measures idiom
+\emph{comprehension}, not what idiomatic phrasing costs on a task that is not
 about idioms.
 
-\textbf{Figurative language inside a task.} Closer to our question is work that
-scores figurative material within a downstream task. \citetf{stowe2022impli} pair
-idiomatic and metaphoric sentences with literal counterparts and find that
-MNLI-finetuned RoBERTa reliably recognizes figurative--literal entailment yet
-fails on matched non-entailing pairs. For metaphor,
-\citetf{sanchezbayona2025metaphor} conclude from NLI and QA experiments that LLM
-performance is shaped more by lexical overlap and sentence length than by
-metaphorical content --- an independent finding consonant with ours. Our design
-departs from these in introducing the figurative property by a controlled rewrite
-of items whose original form is also scored, rather than annotating it where it
-already occurs, which is what makes a matched control arm possible.
+\textbf{Figurative language inside a task.} \citetf{stowe2022impli} pair
+idiomatic and metaphoric sentences with literal counterparts and find
+MNLI-finetuned RoBERTa recognizes figurative--literal entailment yet fails on
+matched non-entailing pairs. For metaphor, \citetf{sanchezbayona2025metaphor}
+conclude from NLI and QA experiments that LLM performance is shaped more by
+lexical overlap and sentence length than by metaphorical content, consonant
+with ours. Both annotate the figurative property where it already occurs; we
+introduce it by controlled rewrite of items whose original form is also scored,
+which is what makes a matched control arm possible.
 
-\textbf{Why a paraphrase control is necessary.} Models are sensitive to input
-edits that leave the correct answer intact: \citetf{ribeiro2018semantically} flip
-predictions by \emph{rewording} inputs under semantics-preserving rules (SEARs),
-and for LLMs the effect is larger still --- \citetf{cao2024worst} report a
-45.5-point gap between the best and worst semantically equivalent phrasings of
-the same input. A bare original-versus-idiomatic contrast is therefore
-uninterpretable on its own, because it measures idiomaticity confounded with
-generic rewording sensitivity.
+\textbf{Why a paraphrase control is necessary.} Models are sensitive to edits
+that leave the correct answer intact: \citetf{ribeiro2018semantically} flip
+predictions by \emph{rewording} inputs under semantics-preserving rules, and
+\citetf{cao2024worst} report a 45.5-point gap between the best and worst
+equivalent phrasings of one input. A bare original-versus-idiomatic contrast
+therefore measures idiomaticity confounded with rewording sensitivity.
 
-\textbf{Controlled evaluation design.} Both our rewrites are invariance tests in
-the sense of CheckList \citepf{ribeiro2020checklist} --- label-preserving
-perturbations under which the prediction ought not to change. They are
-deliberately the mirror image of contrast sets \citepf{gardner2020contrast},
-which perturb minimally in order to \emph{change} the gold label. What we add is
-subtraction: reporting the gap between a treatment and a matched control
-condition instead of the treatment alone, the move that control tasks make for
-probing classifiers \citepf{hewitt2019control}. Control conditions have appeared
-in figurative evaluation before --- MUNCH includes deliberately inapt paraphrases
-to detect lexical-similarity shortcutting \citepf{tong2024munch} --- but as a
-distractor in the answer space, not as a matched arm whose accuracy is
-subtracted. Concurrent work argues the general case directly:
-\citetf{yang2026compared} observe that any counterfactual edit bundles the factor
-of interest with incidental surface variation, and report that on MedQA a 14.9\%
-flip rate under a demographic edit is statistically indistinguishable from the
-14.1\% induced by paraphrasing alone. We take that logic as settled and
-instantiate it for a linguistic intervention; unlike the demographic case, a
-residual effect does survive here on inference. Studies that inject a property
-without such a baseline, such as the dialect rewrites of GLUE by
-\citetf{ziems2022value}, accordingly bound its contribution from above rather
-than estimating it. To our knowledge idiom-inserted rewrites of general-purpose
-NLU benchmarks have not previously been scored against a matched,
-semantics-preserving paraphrase arm over the same items, which is what licenses
-attributing the residual to idiomaticity rather than to rewording.
+\textbf{Controlled evaluation design.} Both our rewrites are invariance tests
+in the sense of CheckList \citepf{ribeiro2020checklist}, the mirror image of
+contrast sets \citepf{gardner2020contrast}, which perturb minimally to
+\emph{change} the gold label. What we add is subtraction against a matched
+control, the move probing classifiers make with control tasks
+\citepf{hewitt2019control}. Control conditions exist in figurative evaluation
+already, but as answer-space distractors rather than arms whose accuracy is
+subtracted: MUNCH's deliberately inapt paraphrases detect lexical-similarity
+shortcutting \citepf{tong2024munch}.
+
+\citetf{yang2026compared} argue the general case, reporting that on MedQA a
+14.9\% flip rate under a demographic edit is statistically indistinguishable
+from the 14.1\% induced by paraphrasing alone. We instantiate that logic for a
+linguistic intervention, and unlike the demographic case a residual does
+survive on inference. Studies injecting a property without such a baseline,
+such as the dialect rewrites of GLUE by \citetf{ziems2022value}, bound its
+contribution from above rather than estimating it. To our knowledge
+idiom-inserted rewrites of general-purpose NLU benchmarks have not previously
+been scored against a matched paraphrase arm over the same items.
 
 \section{Methodology}
 \label{sec:methodology}
@@ -232,8 +210,8 @@ The project is implemented as four independently re-runnable stages
 (Figure~\ref{fig:pipeline}) that communicate only through versioned files on
 disk, plus YAML configs that set each stage's run parameters; dataset-specific
 loading and answer-parsing logic lives in per-dataset modules. Any stage
-can therefore be re-executed alone --- evaluating a new model does not require
-repeating cleaning or augmentation --- and every artifact records the config
+can therefore be re-executed alone, so evaluating a new model does not require
+repeating cleaning or augmentation, and every artifact records the config
 hash and model/prompt version that produced it.
 
 \begin{figure}[t]
@@ -252,7 +230,7 @@ hash and model/prompt version that produced it.
   \node[artifact]                (raw)  {Raw dataset\\ \textit{(HF benchmark)}};
   \node[stage, below=of raw]     (s1)   {\textbf{Stage 1: Clean}\\ length filter $\cdot$ normalize $\cdot$ dedupe $\cdot$ stable id};
   \node[artifact, below=of s1]   (orig) {\texttt{original.csv}};
-  \node[stage, below=of orig]    (s2)   {\textbf{Stage 2: Augment}\\ paraphrase / idiomatic LLM rewrite $\cdot$ label / idiom validators};
+  \node[stage, below=of orig]    (s2)   {\textbf{Stage 2: Augment}\\ paraphrase and idiomatic LLM rewrite $\cdot$ label and idiom validators};
   \node[artifact, below=of s2, xshift=-2.4cm] (para) {\texttt{paraphrase.csv}};
   \node[artifact, below=of s2, xshift=2.4cm]  (idio) {\texttt{idiomatic.csv}};
   \node[stage, below=18mm of s2] (s3)   {\textbf{Stage 3: Evaluate}\\ identical prompt on every variant, predictions joined by id};
@@ -279,78 +257,82 @@ hash and model/prompt version that produced it.
   \draw[arrow] (res)  -- (s4);
   \draw[arrow] (s4)   -- (rep);
 \end{tikzpicture}
-\caption{The four-stage pipeline (the stage orchestrators carry no dataset- or
-model-specific branching; each dataset adds its own loader and evaluator
-module). The same pipeline instantiates once per dataset/model
-combination. Raw data is
-cleaned (Stage 1), rewritten into validated paraphrase and idiomatic
-variants (Stage 2), evaluated per model across every variant with an
-identical prompt (Stage 3), and aggregated into the accuracy-delta and
-sole-cause significance analysis (Stage 4). \texttt{original.csv} feeds both
-Stage 2 (as the rewriting source) and Stage 3 (as the control variant)
-directly.}
+\caption{The four-stage pipeline, instantiated once per dataset/model
+combination. Raw data is cleaned (Stage 1), rewritten into validated
+paraphrase and idiomatic variants (Stage 2), evaluated per model on every
+variant under an identical prompt (Stage 3), and aggregated into the
+accuracy-delta and sole-cause analysis (Stage 4). \texttt{original.csv} feeds
+both Stage 2, as the rewriting source, and Stage 3, as the control variant.
+The orchestrators carry no dataset- or model-specific branching; each dataset
+adds its own loader and evaluator module.}
 \label{fig:pipeline}
 \end{figure}
 
-\textbf{Stage 1: Clean.} Each raw dataset is loaded from Hugging Face and
-reduced to one clean CSV of rows suitable for rewriting: rows outside a
-configured length band are dropped (very short inputs leave no room for an idiom;
-very long ones are expensive to augment and dilute the measured effect), text is
-normalized (Unicode NFC, whitespace collapsing), exact duplicates are removed,
-and every retained row gets a stable identifier that aligns all its downstream
-variants. The label $y$ and dataset-specific metadata (e.g., MMLU's answer
-choices) carry through unchanged.
+\textbf{Stage 1: Clean.} Each raw dataset is loaded from Hugging Face at a
+pinned revision, an unpinned dataset being a hard error, and reduced to one
+clean CSV of rows suitable for rewriting. Four filters run in a fixed order,
+identically configured for all three datasets except where noted:
+
+\begin{enumerate}[leftmargin=1.3em]
+\item \textbf{Normalize.} Unicode NFC, whitespace collapsed to single spaces.
+\item \textbf{Length band.} The field to be rewritten must hold 10 to 100
+      whitespace-separated tokens. Shorter inputs leave no room for an idiom;
+      longer ones cost more to augment and dilute the effect, a fixed-size
+      rewrite touching proportionally less of the text.
+\item \textbf{Deduplicate.} Rows colliding on the full (normalized text, label,
+      metadata) triple are dropped, keeping the first.
+\item \textbf{Shuffle and cap.} Survivors are shuffled under a fixed seed, then
+      cut to a row cap: 2{,}000 for SST-2 and MMLU to bound augmentation cost,
+      uncapped for MNLI.
+\end{enumerate}
+
+Each retained row then gets a stable identifier aligning all its downstream
+variants; the label $y$ and dataset metadata (e.g., MMLU's answer choices)
+carry through unchanged.
 
 \subsection{Augmentation into paraphrase and idiomatic variants}
 \label{sec:augmentation}
 
-\textbf{Stage 2: Augment.} Each cleaned row is rewritten by an external
-LLM (Google Gemini) into two variants using two
-distinct, fixed prompt templates. One Gemini sub-model is pinned per dataset for
-cost reasons (\texttt{gemini-3.6-flash} for SST-2 and MMLU,
-\texttt{gemini-3.5-flash-lite} for MNLI), shared by both arms, so the
-paraphrase control stays internally valid within a dataset; only magnitudes
-\emph{across} datasets are not cleanly comparable.
-Templates are selected per dataset so wording suits the input type (MNLI,
-whose rewrite target is a premise judged against a fixed hypothesis, uses its
-own NLI-specific pair):
+\textbf{Stage 2: Augment.} Each cleaned row is rewritten by an external LLM
+(Google Gemini) into two variants using two fixed prompt templates. One Gemini
+sub-model is pinned per dataset for cost reasons (\texttt{gemini-3.6-flash} for
+SST-2 and MMLU, \texttt{gemini-3.5-flash-lite} for MNLI) and shared by both
+arms, so the paraphrase control stays internally valid within a dataset; only
+magnitudes \emph{across} datasets are not cleanly comparable. Templates are
+selected per dataset so the wording suits the input type, MNLI using its own
+NLI-specific pair.
 
-the \emph{paraphrase prompt} asks for a rewording in different words that
-explicitly avoids idiomatic expressions, and the \emph{idiomatic prompt} asks
-for one that naturally incorporates one or more idioms or figures of speech
-while preserving meaning, register, and length. Both are given the task label
-$y$ in the prompt itself, so a rewrite cannot silently invert the correct
-answer, e.g., flipping a positive sentiment snippet into a negative one. An
-external, deliberately stronger LLM is used rather than one of the models under
-evaluation, since the augmenter's own idiom/paraphrase judgment must be more
-reliable than the systems being tested.
+The \emph{paraphrase prompt} asks for a rewording in different words that
+explicitly avoids idiomatic expressions; the \emph{idiomatic prompt} asks for
+one that naturally incorporates idioms or figures of speech while preserving
+meaning, register and length. Both are given the task label $y$, so a rewrite
+cannot silently invert the correct answer. A deliberately stronger external LLM
+is used rather than one of the models under evaluation, since the augmenter's
+idiom judgment must be more reliable than the systems being tested.
 
 Every augmented row then passes a validator chain: \textbf{label
 preservation}, an LLM-judge check that the rewrite has not altered the correct
-label; and \textbf{idiom presence/absence}, a per-variant LLM-judge check
+label, and \textbf{idiom presence/absence}, a per-variant LLM-judge check
 requiring a genuine idiom in the idiomatic variant and none in the paraphrase.
-Rows that fail validation after a bounded number of retries are dropped from
-that variant (recorded in a sidecar manifest for transparency), which is why
-the paraphrase/idiomatic CSVs are typically somewhat smaller than the
-original CSV. An on-disk response cache keyed by (prompt hash, augmenter model,
-input id) makes reruns idempotent and avoids re-incurring API cost.
-Table~\ref{tab:examples} shows one produced triple per dataset.
+Rows failing validation after bounded retries are dropped from that variant and
+recorded in a sidecar manifest, which is why the rewritten CSVs are smaller than
+the original. An on-disk cache keyed by (prompt hash, augmenter model, input id)
+makes reruns idempotent. Table~\ref{tab:examples} shows one produced triple per
+dataset.
 
 \begin{table}[t]
 \centering
 \caption{One aligned \emph{sole-cause} triple per dataset, verbatim from
-\texttt{datasets\_out/}: the original and paraphrase were answered correctly and
-the idiomatic variant was not, so the idiom alone broke the answer. Only one
-field per dataset is rewritten --- SST-2's sentence, MMLU's question stem,
-MNLI's premise --- everything else is byte-identical across rows.
-\textbf{Bold} marks the aligned span each variant puts in the same role. The
-MNLI idiom pairs a negation with \emph{sell short}; the SST-2 idiom reads as
-positive inside a negative-sentiment snippet.}
+\texttt{datasets\_out/}: the original and paraphrase were answered correctly
+and the idiomatic variant was not, so the idiom alone broke the answer. Only
+one field per dataset is rewritten; everything else is byte-identical across
+rows. \textbf{Bold} marks the aligned span each variant puts in the same
+role.}
 \label{tab:examples}
 \footnotesize
 \begin{tabular}{@{}l@{\hspace{1em}}p{0.845\textwidth}@{}}
 \toprule
-\multicolumn{2}{@{}p{0.98\textwidth}@{}}{\textbf{MNLI} --- hypothesis:
+\multicolumn{2}{@{}p{0.98\textwidth}@{}}{\textbf{MNLI} -- hypothesis:
 \emph{``No one would give them credit like that.''}; gold label
 \emph{contradiction}. Idiomatic-only-wrong for 12 of 14 models.} \\
 \addlinespace[1pt]
@@ -358,14 +340,14 @@ original   & Even the Scots are \textbf{likely to give them more credit} than th
 paraphrase & Even the residents of Scotland \textbf{will probably accord them a higher level of recognition} than that amount. \\
 idiomatic  & Even the Scots are \textbf{unlikely to sell them short} like that. \\
 \midrule
-\multicolumn{2}{@{}p{0.98\textwidth}@{}}{\textbf{SST-2} --- gold label
+\multicolumn{2}{@{}p{0.98\textwidth}@{}}{\textbf{SST-2} -- gold label
 \emph{negative}. Idiomatic-only-wrong for 10 of 14 models.} \\
 \addlinespace[1pt]
 original   & in which the rest of the cast was \textbf{outshined} by ll cool j. \\
 paraphrase & in which the rest of the cast was \textbf{outperformed} by ll cool j. \\
 idiomatic  & in which LL Cool J \textbf{stole the show} from the rest of the cast. \\
 \midrule
-\multicolumn{2}{@{}p{0.98\textwidth}@{}}{\textbf{MMLU} --- gold answer
+\multicolumn{2}{@{}p{0.98\textwidth}@{}}{\textbf{MMLU} -- gold answer
 \emph{``The nation invests in research and development of new technology.''};
 the four choices are untouched. Idiomatic-only-wrong for 8 of 14 models.} \\
 \addlinespace[1pt]
@@ -380,70 +362,72 @@ idiomatic  & Which of the following scenarios would \textbf{push out} a nation's
 \label{sec:datasets}
 
 
-Three datasets are evaluated, each scored with the accuracy metric used in its
-original publication. Stage 2 rewrites one field per dataset --- SST-2's
-sentence, MMLU's question stem, MNLI's premise --- and everything else,
-including MMLU's answer choices and MNLI's hypothesis, stays byte-identical
-across the three variants.
+Three datasets are evaluated, each scored with the accuracy metric of its
+original publication. Stage 2 rewrites one field per dataset (SST-2's sentence,
+MMLU's stem, MNLI's premise); everything else, including MMLU's answer choices
+and MNLI's hypothesis, stays byte-identical across the three variants.
 
 \textbf{SST-2} \citepf{socher2013sst} is binary sentiment classification over
-short movie-review snippets; \textbf{MMLU} \citepf{hendrycks2021mmlu} is
-multiple-choice knowledge questions spanning 57 subjects; and \textbf{MNLI}
-\citepf{williams2018mnli} is three-way inference (\emph{entailment} /
-\emph{neutral} / \emph{contradiction}) over premise--hypothesis pairs from ten
+short movie-review snippets. \textbf{MMLU} \citepf{hendrycks2021mmlu} is
+multiple-choice knowledge questions spanning 57 subjects. \textbf{MNLI}
+\citepf{williams2018mnli} asks whether a premise entails, contradicts, or
+leaves undetermined a paired hypothesis, over sentence pairs drawn from ten
 written and spoken genres.
 
-The evaluated split differs by dataset according to what each release makes
-available with labels: MMLU uses its \texttt{validation} split and MNLI its two
-validation splits (below), while SST-2, whose GLUE test labels are withheld,
-draws from \texttt{train} and \texttt{validation} combined, capped at 2{,}000
-rows.
-
+The evaluated split differs by dataset, for one reason: every scored row needs
+a gold label, so a split whose labels are withheld is unusable however large.
+MMLU therefore uses its \texttt{validation} split, MNLI its two validation
+splits (below), and SST-2, whose GLUE test labels are withheld, draws from
+\texttt{train} and \texttt{validation} combined. SST-2's 2{,}000-row cap is a
+compute-budget decision, unrelated to that choice.
 
 The three cover qualitatively different task types under one protocol: short,
-informal, already-somewhat-figurative text; longer, formal, fact-oriented
-multiple-choice questions; and sentence-pair inference. MNLI is the most direct
-test of the three, because in sentiment or knowledge QA an idiom perturbs the
-surface of an input whose answer is otherwise independent of it, whereas an
-entailment judgement turns on a literal reading of the premise itself. Its
-three-way label space also sets chance at 33\% rather than 50\%, which
-depresses the per-row rate of sole-cause events relative to a binary task.
+informal, already-somewhat-figurative text; longer, formal multiple-choice
+questions; and sentence-pair inference.
+
+They also differ in how the rewritten field sits relative to the decision,
+which is a property of the design rather than a prediction. In SST-2 the
+rewritten sentence \emph{is} the object being classified, and sentiment is a
+property an idiom may carry rather than obscure. In MMLU only the stem is
+rewritten, while the four answer choices, where the knowledge tested sits, stay
+untouched. In MNLI the rewritten premise is the span the label is computed
+from, the hypothesis being fixed. \S\ref{sec:discussion} returns to whether
+this explains what we observe. Separately, chance sits at 50\% for SST-2, 33\%
+for MNLI and 25\% for MMLU. Because the sole-cause test counts only rows
+answered correctly on the original (\S\ref{sec:stats}), the share of rows it
+can draw on tracks that floor: pooled across models, 89\% on SST-2, 74\% on
+MNLI and 53\% on MMLU. MMLU therefore works from much the smallest base.
 
 \textbf{MNLI-specific protocol.} MNLI pairs roughly three hypotheses with every
-premise; emitting all of them would repeat the same premise and violate the
-independence assumption behind the paired test, so the loader keeps only the
-first hypothesis per premise. Rows come from the two validation splits combined
-(matched, 9{,}815 pairs; mismatched, 9{,}832), the test labels being withheld.
-The mismatched half contributes the five genres absent from training; each row's
-genre is recorded, but the analysis does not split on it.
-After first-hypothesis selection and cleaning, 5{,}127 premises survive to form
-the MNLI original file, of which 4{,}709 (91.8\%) additionally clear validation
-in \emph{both} rewritten variants and so form the aligned triples the analysis
-runs on.
+premise; emitting all would repeat the premise and violate the independence
+assumption behind the paired test, so the loader keeps only the first hypothesis
+per premise. Rows come from the two validation splits combined (matched, 9{,}815
+pairs; mismatched, 9{,}832), the mismatched half contributing the five genres
+absent from training. Each row's genre is recorded but not split on. After
+first-hypothesis selection and cleaning, 5{,}127 premises survive, of which
+4{,}709 (91.8\%) also clear validation in \emph{both} rewritten variants and so
+form the aligned triples.
 
 \subsection{Evaluated models}
 
-Rather than a single-model case study, we evaluate a broad panel of 14
-open, instruction-tuned decoder LLMs spanning 0.5B to 7B
-parameters across 10 distinct model families and pretraining lineages:
-the Qwen2.5-Instruct family (0.5B / 1.5B / 7B), the Falcon3-Instruct family
-(3B / 7B), the OLMo-2-Instruct family (1B / 7B), Gemma-2-2B-it,
-Mistral-7B-Instruct-v0.3, Phi-4-mini-instruct (3.8B),
-Granite-3.1-2B-Instruct, H2O-Danube3-4B-Chat, Yi-1.5-6B-Chat, and
-SmolLM2-1.7B-Instruct. Tables and prose below drop the
-\texttt{-Instruct}/\texttt{-it}/\texttt{-Chat} suffix.
-All models are evaluated zero-shot with an identical
-dataset-specific prompt template applied to all three variants of a row, so
-only the input text differs between runs; a device-agnostic runner selects
-CUDA, Apple-Silicon MPS, or CPU and adjusts precision accordingly.
+Rather than a single-model case study, we evaluate a panel of 14 open,
+instruction-tuned decoder LLMs spanning 0.5B to 7B parameters across 10 model
+families: Qwen2.5-Instruct (0.5B, 1.5B, 7B), Falcon3-Instruct (3B, 7B),
+OLMo-2-Instruct (1B, 7B), Gemma-2-2B-it, Mistral-7B-Instruct-v0.3,
+Phi-4-mini-instruct (3.8B), Granite-3.1-2B-Instruct, H2O-Danube3-4B-Chat,
+Yi-1.5-6B-Chat and SmolLM2-1.7B-Instruct. Tables and prose below drop the
+\texttt{-Instruct}/\texttt{-it}/\texttt{-Chat} suffix. All are evaluated
+zero-shot under an identical dataset-specific prompt template applied to all
+three variants of a row, so only the input text differs between runs; a
+device-agnostic runner selects CUDA, Apple-Silicon MPS or CPU and adjusts
+precision accordingly.
 
-\textbf{Stage 3: Evaluate.} For each (model, dataset) pair, the model is
-run on all three variant CSVs with the identical prompt, and predictions are
-joined by row id, yielding one matched (original, paraphrase, idiomatic)
-triple of predictions per surviving row. Per-variant accuracy is computed
-directly from these joined predictions, scoring as incorrect any generation the
-dataset's parser cannot map to a label --- a choice \S\ref{sec:results} re-tests
-on the subset where all three variants parsed.
+\textbf{Stage 3: Evaluate.} For each (model, dataset) pair the model is run on
+all three variant CSVs with the identical prompt, and predictions are joined by
+row id, yielding one matched (original, paraphrase, idiomatic) triple per
+surviving row. Per-variant accuracy is computed from these joined predictions,
+scoring as incorrect any generation the dataset's parser cannot map to a label,
+a choice \S\ref{sec:results} re-tests on the subset where all three parsed.
 
 \subsection{Statistical framework}
 \label{sec:stats}
@@ -465,19 +449,18 @@ confidence interval and a McNemar exact p-value over the corresponding
 discordant pairs.
 
 The second, and our primary diagnostic, is a \emph{sole-cause} test, which
-attributes degradation to a single rewrite type rather than to ordinary noise.
-It restricts attention to rows where all three variants were produced and the
-model answered the \textbf{original} correctly --- so any subsequent error is
-attributable to the rewrite, not to the item being hard for that model --- and
-then counts $b$ = \emph{idiomatic-only-wrong} (the idiomatic rewrite alone
-broke an otherwise-correct answer) and $c$ = \emph{paraphrase-only-wrong} (the
-paraphrase rewrite alone broke it). Rows where both rewrites agree, breaking it
-or not, carry no information about which is worse and are excluded, exactly as
-in any paired test. The gap between $b$ and $c$ is then assessed two ways:
+attributes degradation to a single rewrite type rather than to noise. It
+restricts attention to rows where all three variants exist and the model
+answered the \textbf{original} correctly, so any subsequent error is
+attributable to the rewrite rather than to a hard item, then counts $b$ =
+\emph{idiomatic-only-wrong} and $c$ = \emph{paraphrase-only-wrong}. Rows where
+both rewrites agree carry no information about which is worse and are excluded,
+as in any paired test.
+
+The $b$ versus $c$ gap is assessed two ways:
 
 \textbf{McNemar's test} \citepf{mcnemar1947note}, the standard test for paired
-nominal before/after comparisons, with the continuity correction of
-\citetf{edwards1948note}:
+nominal comparisons, with the continuity correction of \citetf{edwards1948note}:
 \begin{equation}
   \chi^2 = \frac{(|b - c| - 1)^2}{b + c}, \qquad \mathrm{df} = 1,
 \end{equation}
@@ -487,29 +470,26 @@ rewrite broke it).
 
 \textbf{Non-parametric bootstrap check.} Because that chi-square approximation
 can be unreliable when $b + c$ is small, every result is cross-checked with a
-paired bootstrap \citepf{efron1993bootstrap}: the aligned
-rows are resampled with replacement 10{,}000 times, $b - c$ is recomputed on
-each resample, and a 95\% percentile interval plus a two-sided empirical
-p-value are read off the result. A result counts as robustly significant only
-when both checks agree, as they do in all 42 per-model runs.
+paired bootstrap \citepf{efron1993bootstrap}: the aligned rows are resampled
+with replacement 10{,}000 times, $b - c$ is recomputed on each resample, and a
+95\% percentile interval plus a two-sided empirical p-value are read off. A
+result counts as robustly significant only when both checks agree, \textbf{as
+they do in all 42 per-model runs}.
 
-The same sole-cause statistics are additionally pooled across all evaluated
-models for a given dataset (summing $b$ and $c$, and resampling from the
-concatenated pooled rows for the bootstrap), with the explicit caveat that
-this pooling is not a rigorous mixed-effects test, since different models
-are not strictly exchangeable independent draws, and is reported as
-indicative rather than definitive.
+The same statistics are additionally pooled across models per dataset (summing
+$b$ and $c$, resampling the concatenated rows), with the caveat that this is
+not a rigorous mixed-effects test and is reported as indicative only
+(\S\ref{sec:threats}).
 
 \section{Experimental results}
 \label{sec:results}
 
-The sweep covers 42 (model, dataset) runs --- all 14 models on each of the
-three datasets --- 126 variant-level inference passes, about 33 hours of
-accelerator time. Every number below is computed over \emph{aligned triples}:
-rows where the original and both validated rewrites exist and parsed, leaving
-1{,}548 / 1{,}085 / 4{,}709 rows for SST-2 / MMLU / MNLI (Stage 3 also scores
-the full original files --- 2{,}000 / 1{,}107 / 5{,}127 rows --- which have no
-counterpart to pair against).
+The sweep covers 42 (model, dataset) runs, all 14 models on each of the three
+datasets, and so 126 variant-level inference passes. Every number below is
+computed over \emph{aligned triples}: rows where the original and both
+validated rewrites exist and parsed, leaving 1{,}548 rows for SST-2, 1{,}085
+for MMLU and 4{,}709 for MNLI. Stage 3 also scores the full original files
+(2{,}000/1{,}107/5{,}127 rows), which have no counterpart to pair against.
 
 \begin{table}[t]
 \centering
@@ -517,8 +497,8 @@ counterpart to pair against).
 models; \emph{sig.} = models with significant negative/positive
 $\Delta_{\text{idi}}$ ($p < 0.05$, McNemar exact). \emph{Parse-clean} repeats
 both after dropping triples with any parse failure. Pooled sole-cause sums $b$
-(idiomatic-only-wrong) and $c$ (paraphrase-only-wrong) across models, tested by
-continuity-corrected McNemar and a 10{,}000-resample bootstrap.}
+and $c$ across models, tested by continuity-corrected McNemar and a
+10{,}000-resample bootstrap.}
 \label{tab:summary}
 \scriptsize
 \setlength{\tabcolsep}{4pt}
@@ -528,11 +508,11 @@ continuity-corrected McNemar and a 10{,}000-resample bootstrap.}
   & \multicolumn{4}{c}{Pooled sole-cause} \\
 \cmidrule(lr){4-6} \cmidrule(lr){7-8} \cmidrule(lr){9-12}
 Dataset & Models & $n$ & $\Delta_{\text{par}}$ & $\Delta_{\text{idi}}$ & sig.
-  & $\Delta_{\text{idi}}$ & sig. & $b$ / $c$ & $\chi^2$ & $p_{\chi^2}$ & $p_{\text{boot}}$ \\
+  & $\Delta_{\text{idi}}$ & sig. & $b$/$c$ & $\chi^2$ & $p_{\chi^2}$ & $p_{\text{boot}}$ \\
 \midrule
-SST-2 & 14 & 1{,}548 & $-1.28$ & $+1.35$ & 0 / 5 & $+0.76$ & 0 / 3 & 533 / 723 & 28.4 & $<$0.0001 & $<$0.0001 \\
-MMLU & 14 & 1{,}085 & $+0.13$ & $-0.79$ & 1 / 0 & $-0.77$ & 1 / 0 & 474 / 378 & 10.6 & 0.0011 & $<$0.0001 \\
-MNLI & 14 & 4{,}709 & $-0.68$ & $-1.28$ & 10 / 0 & $-1.26$ & 10 / 0 & 2{,}804 / 2{,}246 & 61.4 & $<$0.0001 & $<$0.0001 \\
+SST-2 & 14 & 1{,}548 & $-1.28$ & $+1.35$ & 0/5 & $+0.76$ & 0/3 & 533/723 & 28.4 & $<$0.0001 & $<$0.0001 \\
+MMLU & 14 & 1{,}085 & $+0.13$ & $-0.79$ & 1/0 & $-0.77$ & 1/0 & 474/378 & 10.6 & 0.0011 & $<$0.0001 \\
+MNLI & 14 & 4{,}709 & $-0.68$ & $-1.28$ & 10/0 & $-1.26$ & 10/0 & 2{,}804/2{,}246 & 61.4 & $<$0.0001 & $<$0.0001 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -541,8 +521,8 @@ MNLI & 14 & 4{,}709 & $-0.68$ & $-1.28$ & 10 / 0 & $-1.26$ & 10 / 0 & 2{,}804 / 
 \caption{Per-model $\Delta_{\text{idi}}$ (pp), ordered by parameter count, two
 panels. \textbf{Bold}: $\Delta_{\text{idi}}$ itself significant ($p < 0.05$,
 McNemar exact). $\dagger$: the separate sole-cause $b$ vs.\ $c$ gap is
-significant on \emph{both} McNemar and bootstrap (either direction) ---
-independent of bold, so a cell may carry either, both, or neither. Negative
+significant on \emph{both} McNemar and bootstrap (either direction). The two
+marks are independent, so a cell may carry either, both, or neither. Negative
 values support the hypothesis; SST-2 is almost entirely positive.}
 \label{tab:permodel}
 \scriptsize
@@ -568,52 +548,47 @@ idiomatize-a-matched-paraphrase intervention produces a significant
 significant \emph{benefit} on SST-2 (5/14 positive, none negative, pooled
 sole-cause significant in the opposite direction), and a marginal penalty on
 MMLU that survives only in aggregate (1/14 individually, $p=0.0011$ pooled).
-Idiomaticity is therefore not a general accuracy tax; its sign and size track
-how directly the rewritten span carries the decision.
+Idiomaticity is therefore not a general accuracy tax. Any account of it has to
+explain a change of sign across tasks, not merely a change of magnitude;
+\S\ref{sec:discussion} considers one candidate.
 
-\textbf{MNLI: the configuration the design predicts should show the effect.}
-Ten of 14 models show a significant penalty, from Falcon3-3B at $-2.25$~pp to
-Qwen2.5-7B at $-1.17$~pp (Table~\ref{tab:permodel}), and the sole-cause test
-agrees --- $b>c$ for 12 of 14, both tests concurring at $p<0.05$ for 9 of the
-same 10 significant models. Only Mistral-7B-v0.3 splits: a significant
-accuracy delta with a non-significant sole-cause gap ($b=225$, $c=191$). Nine
-models agreeing on two tests with different evidence bases is the strongest
-single result in this study, and it lands exactly where
-\S\ref{sec:methodology} predicted it should: entailment turns on a literal
-reading of the premise, so a figurative surface adds a resolution step that
-can fail. Table~\ref{tab:disagree} works one such row through in full for a
-significant model on each dataset.
+\textbf{MNLI: a consistent idiom-specific penalty.} Ten of 14 models show a
+significant penalty, from Falcon3-3B at $-2.25$~pp to Qwen2.5-7B at $-1.17$~pp
+(Table~\ref{tab:permodel}), and the sole-cause test agrees: $b>c$ for 12 of 14,
+both tests concurring at $p<0.05$ for 9 of the same 10 significant models. Only
+Mistral-7B-v0.3 splits, with a significant accuracy delta but a non-significant
+sole-cause gap ($b=225$, $c=191$). Nine models agreeing on two tests with
+different evidence bases is the strongest single result in this study.
+Table~\ref{tab:disagree} works one such row through in full for a significant
+model on each dataset.
 
 \textbf{SST-2: the idiom recovers what the paraphrase cost.} Original accuracy
 is high and tight (83.8--91.7\%); plain paraphrasing already costs 12 of 14
 models, significantly for 4, and idiomatizing that same rewording recovers
-most of the loss --- positive for 12 of 14, significant for 5, with
+most of the loss: positive for 12 of 14, significant for 5, with
 Mistral-7B-v0.3 swinging widest ($-2.91$~pp then $+4.13$~pp). This is partly
-genuine: SST-2's idioms tend to carry sentiment rather than obscure it
-(Table~\ref{tab:examples}). It is partly artifact, addressed below.
+genuine, since sentiment is a property idioms can carry rather than obscure,
+and partly artifact, as addressed below.
 
 \textbf{MMLU: a small effect capped by what gets rewritten.} MMLU spreads
 models much more widely (29.7--68.7\%, against a 25\% floor) while both deltas
 stay small ($+0.13$/$-0.79$~pp); only H2O-Danube3-4B reaches individual
-significance, but the sole-cause direction is consistent enough ($b>c$ for 9
-of 14) that pooling turns it significant. This is likely structural: Stage 2
-rewrites only the question stem, leaving the answer choices --- where an MMLU
-item's actual knowledge requirement sits --- untouched, so an idiom can
-obscure what is asked without touching what the model must know. Models near
-the chance floor also generate too few sole-cause events to have power
-regardless (OLMo-2-1B: $b=8$, $c=11$).
+significance, but the sole-cause direction is consistent enough ($b>c$ for 9 of
+14) that pooling turns it significant. One structural feature may cap the size
+available: Stage 2 rewrites only the stem, leaving the four answer choices
+untouched, so an idiom can obscure what is asked without reaching what the
+model must know. Models near the chance floor also generate too few sole-cause
+events to have power (OLMo-2-1B: $b=8$, $c=11$).
 
 \begin{table}[t]
 \centering
 \caption{Worked disagreement cases: three rows where a model with a
 \emph{significant} $\Delta_{\text{idi}}$ predicted differently under the
 paraphrase and the idiomatic rewrite ($\checkmark$ correct, $\times$ wrong).
-\textbf{Bold} marks the aligned span each variant puts in the same role. Every
-variant is scored under the same fixed system prompt (one word/letter answer
-per dataset) and only the rewritten field changes within a block. The MNLI and
-MMLU blocks show the majority direction, where the idiom alone breaks a correct
-answer; the SST-2 block shows that dataset's reversal, where the paraphrase
-breaks the answer and the idiom restores it.}
+\textbf{Bold} marks the aligned span. Every variant is scored under the same
+fixed system prompt, so only the rewritten field changes within a block. MNLI
+and MMLU show the majority direction, the idiom alone breaking a correct
+answer; SST-2 shows that dataset's reversal.}
 \label{tab:disagree}
 \scriptsize
 \setlength{\tabcolsep}{4pt}
@@ -621,7 +596,7 @@ breaks the answer and the idiom restores it.}
 \toprule
 Variant & User prompt & Prediction \\
 \midrule
-\multicolumn{3}{@{}p{0.98\textwidth}@{}}{\textbf{MNLI} ---
+\multicolumn{3}{@{}p{0.98\textwidth}@{}}{\textbf{MNLI} --
 Falcon3-3B-Instruct ($\Delta_{\text{idi}} = -2.25$~pp). Every prompt ends
 \texttt{Hypothesis: She now knows what was going on in her mind.}\ /
 \texttt{Answer:}. Gold: \emph{entailment}.} \\
@@ -630,7 +605,7 @@ original   & \texttt{Premise:} It took me really a long time to \textbf{sort} wh
 paraphrase & \texttt{Premise:} She stated that it required a significant amount of time for her to \textbf{organize her thoughts}. & entailment $\checkmark$ \\
 idiomatic  & \texttt{Premise:} It took me quite a while to \textbf{wrap my head around} what was going on in my mind, she said. & contradiction $\times$ \\
 \midrule
-\multicolumn{3}{@{}p{0.98\textwidth}@{}}{\textbf{SST-2} ---
+\multicolumn{3}{@{}p{0.98\textwidth}@{}}{\textbf{SST-2} --
 Mistral-7B-Instruct-v0.3 ($\Delta_{\text{idi}} = +4.13$~pp). Gold:
 \emph{positive}.} \\
 \addlinespace[1pt]
@@ -638,7 +613,7 @@ original   & \texttt{Sentence:} is n't embarrassed to \textbf{make you reach for
 paraphrase & \texttt{Sentence:} is not ashamed to \textbf{make you cry} & negative $\times$ \\
 idiomatic  & \texttt{Sentence:} isn't shy about \textbf{pulling at your heartstrings} and making you reach for the tissues & positive $\checkmark$ \\
 \midrule
-\multicolumn{3}{@{}p{0.98\textwidth}@{}}{\textbf{MMLU} ---
+\multicolumn{3}{@{}p{0.98\textwidth}@{}}{\textbf{MMLU} --
 H2O-Danube3-4B-Chat ($\Delta_{\text{idi}} = -2.49$~pp). The four choices are
 untouched: \texttt{A.}\ a logical mistake.\ \texttt{B.}\ an ethical mistake.\
 \texttt{C.}\ a factual mistake.\ \texttt{D.}\ not a mistake. Gold: \emph{D}.} \\
@@ -653,124 +628,136 @@ idiomatic  & \texttt{Question:} \textbf{In Nagel's eyes}, the view that moral lu
 \textbf{The SST-2 reversal is partly a parsing artifact.} Unparseable
 generations score as incorrect, so a variant provoking more format violations
 is penalised for reasons unrelated to idiom comprehension. Failure rates are
-low on average (1.0\%/0.2\%/0.3\% for SST-2/MMLU/MNLI) but uneven --- up to
-6.7\% for Mistral-7B-v0.3 on SST-2 --- and there the \emph{paraphrase} arm
+low on average (1.0\%/0.2\%/0.3\% for SST-2/MMLU/MNLI) but uneven, reaching
+6.7\% for Mistral-7B-v0.3 on SST-2, and there the \emph{paraphrase} arm
 fails more often than the idiomatic arm for 11 of 14 models, inflating
-$\Delta_{\text{idi}}$. Dropping every triple with any parse failure leaves
-MMLU and MNLI untouched (all 10 significant MNLI models survive) but cuts
-SST-2's mean from $+1.35$ to $+0.76$~pp and its significant count from 5 to 3;
-Qwen2.5-7B is the clearest case, its apparent $+3.04$~pp advantage becoming
+$\Delta_{\text{idi}}$. Dropping every triple with any parse failure leaves MMLU
+and MNLI untouched, all 10 significant MNLI models included, but cuts SST-2's
+mean from $+1.35$ to $+0.76$~pp and its significant count from 5 to 3.
+Qwen2.5-7B is the clearest case: an apparent $+3.04$~pp advantage becomes
 $-0.21$~pp once its 6.4\%-vs-2.1\% parse-failure gap is removed. The direction
-survives regardless --- even filtered, no SST-2 model shows a significant
-idiom \emph{penalty}, only a smaller advantage.
+survives regardless, no SST-2 model showing a significant idiom
+\emph{penalty} even filtered.
 
 \textbf{No capability or scale trend.} $\Delta_{\text{idi}}$ correlates with
 neither original accuracy ($-0.13$/$+0.28$/$-0.29$) nor parameter count
-($+0.10$/$+0.24$/$-0.30$) at any significance ($p>0.3$ throughout). The
-Qwen2.5 ladder makes the point concretely: MNLI's penalty is non-monotone
-across its three sizes ($-0.40$, $-1.59$, $-1.17$~pp at 0.5B/1.5B/7B), and all
-four 7B models in the panel sit inside the degraded group rather than above
-it. Rewriting is not purely destructive, either --- pooled across models, 419
-SST-2, 235 MMLU and 1{,}614 MNLI rows were wrong on the original but right on
-both rewrites.
+($+0.10$/$+0.24$/$-0.30$) at any significance ($p>0.3$ throughout). The Qwen2.5
+ladder shows it concretely: MNLI's penalty is non-monotone across its three
+sizes ($-0.40$, $-1.59$, $-1.17$~pp at 0.5B/1.5B/7B), and all four 7B models
+sit inside the degraded group. Rewriting is not purely destructive either:
+pooled across models, 419 SST-2, 235 MMLU and 1{,}614 MNLI rows were wrong on
+the original but right on both rewrites.
 
 
 \section{Discussion}
+\label{sec:discussion}
 
-\textbf{The control arm is what makes the data legible.} Score idiomatic
-directly against original --- the design most idiom studies use --- and SST-2
-looks like a null ($+0.07$~pp, 1/14 significant) while MNLI's cost is
-overstated by roughly 53\% (the naive $-1.96$~pp bundles in $-0.68$~pp of
-plain rewording). The matched arm turns that false null into two real,
-cancelling effects on SST-2 and corrects MNLI to its true size; neither
-correction is visible without it.
+\textbf{The control arm is what makes the data legible.} The choice doing this
+work is Eq.~\ref{eq:deltas}: $\Delta_{\text{idi}}$ is measured against
+\emph{paraphrase} accuracy, not original accuracy, so subtracting the
+paraphrase arm removes the rewording cost both rewrites incur and leaves only
+what idiomaticity adds. Score idiomatic against original instead, as a study
+without a control arm must, and SST-2 looks like a null ($+0.07$~pp, 1 of 14
+significant) while MNLI's cost is overstated by roughly 53\%, its naive
+$-1.96$~pp bundling in $-0.68$~pp of plain rewording. The matched arm splits
+that false null into two real cancelling effects and cuts MNLI's to its
+idiom-specific size. Neither correction is visible without it.
 
-\textbf{Where the effect lives matters more than whether it exists.}
-Idiomaticity costs accuracy exactly when the figurative surface sits on the
-span the answer is computed from: MNLI rewrites the premise a literal reading
-depends on ($-1.28$~pp); MMLU rewrites a stem while the knowledge sits in
-untouched choices ($-0.79$~pp); SST-2's idioms carry the very property being
-classified, so they help rather than hurt ($+1.35$~pp). This is a ranking, not
-a magnitude comparison --- MNLI's augmenter and rewrite depth differ from the
-other two --- but the ordering matches exactly what a load-bearing-span
-account predicts, and it is a narrower, more falsifiable claim than ``idioms
-degrade LLMs.'' It tempers without contradicting the comprehension weaknesses
-\citetf{tayyar2021astitch} and \citetf{chakrabarty2022flute} report directly:
-what we measure is the residual cost after a model applies whatever partial
-idiom understanding it has, on a task it was never asked to reason about
-idioms for.
+\textbf{One candidate explanation, which this study does not test.} The
+ordering ($-1.28$ MNLI, $-0.79$ MMLU, $+1.35$~pp SST-2) lines up with how the
+rewritten field relates to the decision (\S\ref{sec:datasets}): MNLI's premise
+is the span the label is computed from, MMLU's stem leaves the knowledge in
+untouched choices, and SST-2's sentence carries the very property being
+classified, so an idiom there may supply sentiment rather than obscure it.
 
-\textbf{The magnitudes are real but modest, and scale is not a fix.} A 1--2~pp
-MNLI drop is statistically robust but the same order as plain rewording's own
-cost, not an order above it --- idiomaticity is one distinguishable
-contributor to paraphrase sensitivity, not a separate failure mode. No
-correlation with scale exceeds $|\rho|=0.30$ across a 14-fold parameter range,
-but with only 14 models $|\rho| \gtrsim 0.53$ is the significance floor:
-absence of evidence, not evidence of absence. The practical upshot is a
-triage rule, not a scaling law --- invest in idiom robustness where
-figurative language can land on the decision-bearing span, not where a bigger
-checkpoint is assumed to absorb it.
+That is a hypothesis suggested by the results, not something the design tests.
+Three datasets cannot separate it from the other ways they differ, and MNLI's
+augmenter and rewrite depth are not matched to the other two, so the ordering
+is a ranking rather than a magnitude comparison. Its merit is falsifiability;
+\S\ref{sec:futurework} gives the experiment. Without it the data still support
+something firmer: idiomaticity has an isolable effect whose sign is not
+constant across tasks. That tempers without contradicting the comprehension
+weaknesses \citetf{tayyar2021astitch} and \citetf{chakrabarty2022flute} report,
+since we measure the residual cost after a model applies whatever partial idiom
+understanding it has, on a task never asked to reason about idioms.
+
+\textbf{The magnitudes are real but modest.} A 1--2~pp MNLI drop is
+statistically robust, but it is the same order as plain rewording's own cost
+rather than an order above it. Idiomaticity is best read as one distinguishable
+contributor to paraphrase sensitivity, not as a separate failure mode.
+
+\textbf{Scale should not be assumed to fix it.} Across a 14-fold parameter
+range no correlation with model size exceeds $|\rho|=0.30$, but that is weaker
+than it looks: with 14 models, $|\rho|$ must reach about $0.53$ before the test
+can call anything significant, so a moderate trend could be present and go
+undetected. Nothing in this panel supports waiting for a larger checkpoint to
+solve the problem, and settling the question needs many more models than 14.
 
 \subsection{Threats to validity}
 \label{sec:threats}
 
-\textbf{The statistical treatment has three known weaknesses.} The parse-failure
-filter is blunt --- it drops 2.2\% of SST-2 rows on average but 12.4\% for
-Mistral-7B-v0.3 there, and 8.2\% for OLMo-2-1B on MNLI, and dropping
-rows non-randomly can itself
-bias a comparison --- so filtered and unfiltered readings bracket the truth. The
-pooled tests also treat models' items as exchangeable when the same row recurs
-once per model, so a row that is idiom-hard for many models is resampled as many
-independent observations --- clustering that narrows pooled intervals and makes
-pooled p-values optimistic. No mixed-effects model was run, so pooled figures ---
-including MMLU's, which rests entirely on pooling --- are indicative, not
-definitive. No multiple-comparisons correction is applied either: 14 tests at
-$\alpha = 0.05$ expect 0.7 hits under a true null, so MMLU's single one carries
-little weight ($P(X \geq 1) = 0.51$) while MNLI's 10 and SST-2's five positives
-are clear of chance ($8 \times 10^{-11}$, $4 \times 10^{-4}$).
+\textbf{The parse-failure filter is blunt.} It drops 2.2\% of SST-2 rows on
+average but 12.4\% for Mistral-7B-v0.3 there, and 8.2\% for OLMo-2-1B on MNLI.
+Dropping rows non-randomly can itself bias a comparison, so the filtered and
+unfiltered readings bracket the truth rather than either being correct.
+
+\textbf{The pooled tests overstate their own confidence.} Pooling sums $b$ and
+$c$ across models and resamples the concatenated rows, treating every (model,
+row) pair as independent. They are not: each row recurs once per model, so a
+row that is idiom-hard for many models is counted many times over. Pooled
+intervals therefore come out narrower, and pooled p-values smaller, than the
+evidence warrants. Correcting it needs a mixed-effects model with a random
+effect per row, which we did not run, so pooled figures are indicative only.
+That falls hardest on MMLU, whose result rests on pooling alone.
+
+\textbf{No multiple-comparisons correction is applied.} Fourteen tests at
+$\alpha = 0.05$ expect 0.7 hits under a true null, so MMLU's single significant
+model carries little weight ($P(X \geq 1) = 0.51$). MNLI's 10 and SST-2's five
+are clear of chance ($8 \times 10^{-11}$ and $4 \times 10^{-4}$ respectively).
 
 \textbf{Scope limits.} Every model was evaluated zero-shot, greedily, under a
-single prompt template per dataset, so few-shot prompting, sampled decoding and
-prompt-format variation are untested and could interact with idiomaticity; the
-panel is also decoder-only.
+single prompt template per dataset. Few-shot prompting, sampled decoding and
+prompt-format variation are therefore untested and could interact with
+idiomaticity. The panel is also decoder-only.
 
 \subsection{Future work}
 \label{sec:futurework}
 
-The most valuable next step would sharpen the MNLI finding
-rather than broaden it: a direct check that rewrites preserve meaning, ruling
-out semantic drift as an alternative explanation. A mixed-effects re-analysis would
-then put the pooled claims on a proper footing, and extending to few-shot
-prompting would establish whether in-context examples recover the loss, as
-labelled examples do for the fine-tuned encoders of \citetf{tayyar2021astitch}.
+\textbf{Shore up the existing result.} The most valuable next step sharpens the
+MNLI finding rather than broadening it: a direct check that the rewrites
+preserve meaning, ruling out semantic drift. A mixed-effects re-analysis would
+then put the pooled claims on the footing \S\ref{sec:threats} says they lack.
 
-Three further extensions would test \emph{why} the effect concentrates where it
-does rather than only \emph{that} it does.
+\textbf{Test the explanation rather than assume it.} Two analyses reuse the
+data already collected and need no new model runs. The first grades how opaque
+each inserted idiom is, via the augmenter or published psycholinguistic norms,
+and correlates that against $\Delta_{\text{idi}}$: if the cost comes from
+non-compositionality, more opaque idioms should cost more, whereas today every
+idiom counts the same. The second does the equivalent for idiom frequency, from
+corpus counts or the model's own perplexity; finding that rarer idioms cost
+more would confirm on our task the familiarity account
+\citetf{tayyar2021astitch} establish for comprehension, which we can currently
+only invoke by analogy.
 
-Idiom opacity is currently binary. Scoring each inserted idiom's compositional
-transparency --- via the augmenter itself, or existing psycholinguistic norms
---- and correlating it against $\Delta_{\text{idi}}$ would test whether cost
-scales with non-compositionality rather than mere idiom presence. This reuses
-data already collected, with no new model runs required.
+A third, more expensive experiment tests the hypothesis of
+\S\ref{sec:discussion} directly, varying idiom position \emph{within} one
+dataset instead of across three. Rewriting MNLI's hypothesis as well as its
+premise, or MMLU's choices as well as its stem, makes position a manipulated
+variable with dataset, augmenter and models fixed. It needs new augmented data
+and a fresh sweep.
 
-The same logic applies to frequency: idiom rarity, via corpus statistics or
-target-model perplexity, would test the familiarity account of
-\citetf{tayyar2021astitch} directly rather than by analogy. Like the opacity
-check, this is a post-hoc correlation against the existing 42 runs. A
-dose-response relationship here would strengthen the mechanistic story behind
-the observed penalty.
-
-A third extension would turn the load-bearing explanation above from a
-cross-dataset correlation into a manipulated variable, by rewriting MNLI's
-hypothesis (or MMLU's answer choices) in addition to the premise/stem so idiom
-position varies within one dataset rather than across three. Unlike the first
-two, this requires new augmented data and fresh evaluation runs.
-
-% ---------------------------------------------------------------------------
-% RESERVED SPACE: add further future-work items here, then delete the \vspace
-% below (it exists only to hold the room open in the current PDF).
-% ---------------------------------------------------------------------------
-\vspace{1\baselineskip}
+\textbf{Try to reduce the penalty, not only measure it.} Everything above is
+diagnostic. Few-shot prompting is the cheap intervention: in-context examples
+may recover the accuracy idioms cost, as labelled examples do for the
+fine-tuned encoders of \citetf{tayyar2021astitch}. Demonstrations also
+constrain output format, so they should cut the unparseable-generation rate
+\S\ref{sec:results} shows contaminates the SST-2 comparison, separating format
+from comprehension there. Few-shot prompting the \emph{augmenter} is worth
+trying too, since examples of good rewrites should cut the validator-failure
+rate that currently costs us rows. Fine-tuning is the substantial one: briefly
+tuning each model on labelled idiomatic rewrites would show whether the penalty
+is a fixable gap in exposure or something a model this size cannot learn away,
+and the tuned-versus-zero-shot gap would size how much is remediable.
 
 \section{Summary}
 
@@ -780,13 +767,14 @@ idiomatic rewrite with a matched non-idiomatic paraphrase of the same row so
 that the cost of rewording is subtracted rather than absorbed into the effect.
 That control is what makes the result readable. Without it, SST-2 looks like a
 null and MNLI's idiom-specific penalty is overstated by roughly 53\%. With it,
-the penalty is confined to the configuration where the rewritten span is the one
-the label is computed from: $-1.28$~pp on MNLI, significant for 10 of the 14
-models, against $-0.79$~pp on MMLU with a single significant model and no
-penalty at all on binary sentiment. Idiomaticity is therefore a distinguishable
-contributor to paraphrase sensitivity rather than a separate failure mode, and
-no scale trend is detectable across a 14-fold parameter range, though 14 models
-could not detect a moderate one.
+the penalty concentrates on MNLI: $-1.28$~pp there, significant for 10 of the
+14 models, against $-0.79$~pp on MMLU with a single significant model and no
+penalty at all on binary sentiment. These are means across the 14 models rather
+than pooled figures; the pooled sole-cause tests are reported separately in
+Table~\ref{tab:summary}. Idiomaticity is therefore a distinguishable
+contributor to paraphrase sensitivity rather than a separate failure mode. No
+scale trend is detectable across a 14-fold parameter range, though a panel of
+14 models could not have detected a moderate one.
 
 \section{Code}
 
