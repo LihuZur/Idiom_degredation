@@ -177,9 +177,10 @@ which is what makes a matched control arm possible.
 \textbf{Why a paraphrase control is necessary.} Models are sensitive to edits
 that leave the correct answer intact: \citetf{ribeiro2018semantically} flip
 predictions by \emph{rewording} inputs under semantics-preserving rules, and
-\citetf{cao2024worst} report a 45.5-point gap between the best and worst
-equivalent phrasings of one input. A bare original-versus-idiomatic contrast
-therefore measures idiomaticity confounded with rewording sensitivity.
+\citetf{cao2024worst} find their worst-case model swinging 45.5 points across
+semantically equivalent prompt templates. A bare original-versus-idiomatic
+contrast therefore measures idiomaticity confounded with rewording
+sensitivity.
 
 \textbf{Controlled evaluation design.} Both our rewrites are invariance tests
 in the sense of CheckList \citepf{ribeiro2020checklist}, the mirror image of
@@ -207,11 +208,11 @@ been scored against a matched paraphrase arm over the same items.
 \subsection{Pipeline overview}
 
 The project is implemented as four independently re-runnable stages
-(Figure~\ref{fig:pipeline}) that communicate only through versioned files on
-disk, plus YAML configs that set each stage's run parameters; dataset-specific
-loading and answer-parsing logic lives in per-dataset modules. Any stage
-can therefore be re-executed alone, so evaluating a new model does not require
-repeating cleaning or augmentation, and every artifact records the config
+(Figure~\ref{fig:pipeline}) communicating only through versioned files on disk,
+plus YAML configs setting each stage's run parameters; per-dataset modules hold
+the loading and answer-parsing logic. Any stage can be re-executed alone, so
+evaluating a new model does not require repeating cleaning or augmentation, and
+every artifact records the config
 hash and model/prompt version that produced it.
 
 \begin{figure}[t]
@@ -276,14 +277,14 @@ identically configured for all three datasets except where noted:
 \begin{enumerate}[leftmargin=1.3em]
 \item \textbf{Normalize.} Unicode NFC, whitespace collapsed to single spaces.
 \item \textbf{Length band.} The field to be rewritten must hold 10 to 100
-      whitespace-separated tokens. Shorter inputs leave no room for an idiom;
-      longer ones cost more to augment and dilute the effect, a fixed-size
-      rewrite touching proportionally less of the text.
+      whitespace-separated tokens: shorter leaves no room for an idiom, longer
+      costs more to augment and, we assumed without testing it, dilutes a
+      fixed-size rewrite.
 \item \textbf{Deduplicate.} Rows colliding on the full (normalized text, label,
       metadata) triple are dropped, keeping the first.
 \item \textbf{Shuffle and cap.} Survivors are shuffled under a fixed seed, then
-      cut to a row cap: 2{,}000 for SST-2 and MMLU to bound augmentation cost,
-      uncapped for MNLI.
+      cut to a 2{,}000-row cap; MNLI is uncapped. It binds only on SST-2
+      (25{,}901 rows cut to 2{,}000); MMLU's 1{,}107 already fall under it.
 \end{enumerate}
 
 Each retained row then gets a stable identifier aligning all its downstream
@@ -306,9 +307,9 @@ The \emph{paraphrase prompt} asks for a rewording in different words that
 explicitly avoids idiomatic expressions; the \emph{idiomatic prompt} asks for
 one that naturally incorporates idioms or figures of speech while preserving
 meaning, register and length. Both are given the task label $y$, so a rewrite
-cannot silently invert the correct answer. A deliberately stronger external LLM
-is used rather than one of the models under evaluation, since the augmenter's
-idiom judgment must be more reliable than the systems being tested.
+cannot silently invert the correct answer. An external LLM is used rather than
+one under evaluation, requiring its idiom judgment to be at least as reliable
+as the systems tested; we did not benchmark that against them.
 
 Every augmented row then passes a validator chain: \textbf{label
 preservation}, an LLM-judge check that the rewrite has not altered the correct
@@ -451,13 +452,11 @@ discordant pairs.
 The second, and our primary diagnostic, is a \emph{sole-cause} test, which
 attributes degradation to a single rewrite type rather than to noise. It
 restricts attention to rows where all three variants exist and the model
-answered the \textbf{original} correctly, so any subsequent error is
-attributable to the rewrite rather than to a hard item, then counts $b$ =
+answered the \textbf{original} correctly, so any later error is attributable to
+the rewrite rather than to a hard item, then counts $b$ =
 \emph{idiomatic-only-wrong} and $c$ = \emph{paraphrase-only-wrong}. Rows where
 both rewrites agree carry no information about which is worse and are excluded,
-as in any paired test.
-
-The $b$ versus $c$ gap is assessed two ways:
+as in any paired test. The gap between $b$ and $c$ is assessed two ways:
 
 \textbf{McNemar's test} \citepf{mcnemar1947note}, the standard test for paired
 nominal comparisons, with the continuity correction of \citetf{edwards1948note}:
@@ -566,19 +565,20 @@ model on each dataset.
 is high and tight (83.8--91.7\%); plain paraphrasing already costs 12 of 14
 models, significantly for 4, and idiomatizing that same rewording recovers
 most of the loss: positive for 12 of 14, significant for 5, with
-Mistral-7B-v0.3 swinging widest ($-2.91$~pp then $+4.13$~pp). This is partly
-genuine, since sentiment is a property idioms can carry rather than obscure,
-and partly artifact, as addressed below.
+Mistral-7B-v0.3 swinging widest ($-2.91$~pp then $+4.13$~pp). Part is artifact,
+quantified below; a residual survives that filtering. One reading is that
+idioms here carry sentiment rather than obscure it, but nothing we ran isolates
+that from other explanations.
 
-\textbf{MMLU: a small effect capped by what gets rewritten.} MMLU spreads
-models much more widely (29.7--68.7\%, against a 25\% floor) while both deltas
-stay small ($+0.13$/$-0.79$~pp); only H2O-Danube3-4B reaches individual
-significance, but the sole-cause direction is consistent enough ($b>c$ for 9 of
-14) that pooling turns it significant. One structural feature may cap the size
-available: Stage 2 rewrites only the stem, leaving the four answer choices
-untouched, so an idiom can obscure what is asked without reaching what the
-model must know. Models near the chance floor also generate too few sole-cause
-events to have power (OLMo-2-1B: $b=8$, $c=11$).
+\textbf{MMLU: a small effect, cause untested.} MMLU spreads models much more
+widely (29.7--68.7\%, against a 25\% floor) while both deltas stay small
+($+0.13$/$-0.79$~pp); only H2O-Danube3-4B reaches individual significance, but
+the sole-cause direction is consistent enough ($b>c$ for 9 of 14) that pooling
+turns it significant. One structural feature may cap the size available, on no
+ablation of ours: Stage 2 rewrites only the stem, leaving the four answer
+choices untouched, so an idiom can obscure what is asked without reaching what
+the model must know. Models near the chance floor also generate too few
+sole-cause events to have power (OLMo-2-1B: $b=8$, $c=11$).
 
 \begin{table}[t]
 \centering
@@ -729,19 +729,20 @@ preserve meaning, ruling out semantic drift. A mixed-effects re-analysis would
 then put the pooled claims on the footing \S\ref{sec:threats} says they lack.
 
 \textbf{Test the explanation rather than assume it.} Two analyses reuse the
-data already collected and need no new model runs. The first grades how opaque
-each inserted idiom is, via the augmenter or published psycholinguistic norms,
-and correlates that against $\Delta_{\text{idi}}$: if the cost comes from
-non-compositionality, more opaque idioms should cost more, whereas today every
-idiom counts the same. The second does the equivalent for idiom frequency, from
-corpus counts or the model's own perplexity; finding that rarer idioms cost
-more would confirm on our task the familiarity account
-\citetf{tayyar2021astitch} establish for comprehension, which we can currently
-only invoke by analogy.
+rewritten text already collected, but both need a step we skipped: Stage 2
+records no inventory of which idiom it inserted where, so each row's idiom must
+first be identified. The first then grades that idiom's opacity against
+published psycholinguistic norms and correlates it with $\Delta_{\text{idi}}$;
+if the cost comes from non-compositionality, more opaque idioms should cost
+more, whereas today every idiom counts the same. The second does the equivalent
+for frequency from corpus counts, where rarer idioms costing more would confirm
+on our task the familiarity account \citetf{tayyar2021astitch} establish for
+comprehension, which we can currently only invoke by analogy. Scoring either
+through the augmenter or model perplexity instead needs fresh inference.
 
 A third, more expensive experiment tests the hypothesis of
 \S\ref{sec:discussion} directly, varying idiom position \emph{within} one
-dataset instead of across three. Rewriting MNLI's hypothesis as well as its
+dataset rather than across three: rewriting MNLI's hypothesis as well as its
 premise, or MMLU's choices as well as its stem, makes position a manipulated
 variable with dataset, augmenter and models fixed. It needs new augmented data
 and a fresh sweep.
@@ -752,12 +753,11 @@ may recover the accuracy idioms cost, as labelled examples do for the
 fine-tuned encoders of \citetf{tayyar2021astitch}. Demonstrations also
 constrain output format, so they should cut the unparseable-generation rate
 \S\ref{sec:results} shows contaminates the SST-2 comparison, separating format
-from comprehension there. Few-shot prompting the \emph{augmenter} is worth
-trying too, since examples of good rewrites should cut the validator-failure
-rate that currently costs us rows. Fine-tuning is the substantial one: briefly
-tuning each model on labelled idiomatic rewrites would show whether the penalty
-is a fixable gap in exposure or something a model this size cannot learn away,
-and the tuned-versus-zero-shot gap would size how much is remediable.
+from comprehension there. Few-shot prompting the \emph{augmenter} should
+likewise cut the validator failures that currently cost us rows. Fine-tuning is
+the substantial one: briefly tuning each model on labelled idiomatic rewrites
+would show whether the penalty is a fixable gap in exposure or something a
+model this size cannot learn away.
 
 \section{Summary}
 
