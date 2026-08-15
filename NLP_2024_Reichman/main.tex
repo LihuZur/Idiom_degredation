@@ -177,10 +177,10 @@ which is what makes a matched control arm possible.
 \textbf{Why a paraphrase control is necessary.} Models are sensitive to edits
 that leave the correct answer intact: \citetf{ribeiro2018semantically} flip
 predictions by \emph{rewording} inputs under semantics-preserving rules, and
-\citetf{cao2024worst} find their worst-case model swinging 45.5 points across
-semantically equivalent prompt templates. A bare original-versus-idiomatic
-contrast therefore measures idiomaticity confounded with rewording
-sensitivity.
+\citetf{cao2024worst} find Llama-2-70B-chat's performance varying by 45.5
+points between the best and worst of a set of semantically equivalent queries.
+A bare original-versus-idiomatic contrast therefore measures idiomaticity
+confounded with rewording sensitivity.
 
 \textbf{Controlled evaluation design.} Both our rewrites are invariance tests
 in the sense of CheckList \citepf{ribeiro2020checklist}, the mirror image of
