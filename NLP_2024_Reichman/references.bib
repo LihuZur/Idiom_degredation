@@ -1,5 +1,11 @@
+% Every title is wrapped in \href{...}{...} so the bibliography entry itself is
+% the clickable link: no separate URL line, which the two-column bibliography
+% has no room for. unsrtnat does not case-fold titles, so the URLs survive
+% BibTeX intact. Links point at the published venue (ACL Anthology, NeurIPS
+% proceedings, publisher DOI) and at arXiv only for preprints.
+
 @inproceedings{socher2013sst,
-  title     = {Recursive Deep Models for Semantic Compositionality Over a Sentiment Treebank},
+  title     = {\href{https://aclanthology.org/D13-1170/}{Recursive Deep Models for Semantic Compositionality Over a Sentiment Treebank}},
   author    = {Socher, Richard and others},
   booktitle = {Proceedings of EMNLP},
   pages     = {1631--1642},
@@ -7,15 +13,14 @@
 }
 
 @inproceedings{hendrycks2021mmlu,
-  title     = {Measuring Massive Multitask Language Understanding},
+  title     = {\href{https://arxiv.org/abs/2009.03300}{Measuring Massive Multitask Language Understanding}},
   author    = {Hendrycks, Dan and others},
   booktitle = {International Conference on Learning Representations (ICLR)},
   year      = {2021},
-  url       = {https://arxiv.org/abs/2009.03300}
 }
 
 @inproceedings{williams2018mnli,
-  title     = {A Broad-Coverage Challenge Corpus for Sentence Understanding through Inference},
+  title     = {\href{https://aclanthology.org/N18-1101/}{A Broad-Coverage Challenge Corpus for Sentence Understanding through Inference}},
   author    = {Williams, Adina and Nangia, Nikita and Bowman, Samuel R.},
   booktitle = {Proceedings of NAACL-HLT},
   pages     = {1112--1122},
@@ -23,7 +28,7 @@
 }
 
 @article{mcnemar1947note,
-  title   = {Note on the Sampling Error of the Difference Between Correlated Proportions or Percentages},
+  title   = {\href{https://doi.org/10.1007/BF02295996}{Note on the Sampling Error of the Difference Between Correlated Proportions or Percentages}},
   author  = {McNemar, Quinn},
   journal = {Psychometrika},
   volume  = {12},
@@ -32,7 +37,7 @@
 }
 
 @article{edwards1948note,
-  title   = {Note on the ``Correction for Continuity'' in Testing the Difference Between Correlated Proportions},
+  title   = {\href{https://doi.org/10.1007/BF02289261}{Note on the ``Correction for Continuity'' in Testing the Difference Between Correlated Proportions}},
   author  = {Edwards, Allen L.},
   journal = {Psychometrika},
   volume  = {13},
@@ -42,13 +47,13 @@
 
 @book{efron1993bootstrap,
   publisher = {Chapman \& Hall},
-  title     = {An Introduction to the Bootstrap},
+  title     = {\href{https://doi.org/10.1201/9780429246593}{An Introduction to the Bootstrap}},
   author    = {Efron, Bradley and Tibshirani, Robert J.},
   year      = {1993}
 }
 
 @inproceedings{tayyar2021astitch,
-  title     = {{AStitchInLanguageModels}: Dataset and Methods for Exploring Idiomaticity in Pre-Trained Language Models},
+  title     = {\href{https://aclanthology.org/2021.findings-emnlp.294/}{{AStitchInLanguageModels}: Dataset and Methods for Exploring Idiomaticity in Pre-Trained Language Models}},
   author    = {Tayyar Madabushi, Harish and others},
   booktitle = {Findings of the Association for Computational Linguistics: EMNLP 2021},
   pages     = {3464--3477},
@@ -56,7 +61,7 @@
 }
 
 @inproceedings{chakrabarty2022flute,
-  title     = {{FLUTE}: Figurative Language Understanding through Textual Explanations},
+  title     = {\href{https://aclanthology.org/2022.emnlp-main.481/}{{FLUTE}: Figurative Language Understanding through Textual Explanations}},
   author    = {Chakrabarty, Tuhin and others},
   booktitle = {Proceedings of EMNLP},
   pages     = {7139--7159},
@@ -64,7 +69,7 @@
 }
 
 @inproceedings{ribeiro2018semantically,
-  title     = {Semantically Equivalent Adversarial Rules for Debugging {NLP} Models},
+  title     = {\href{https://aclanthology.org/P18-1079/}{Semantically Equivalent Adversarial Rules for Debugging {NLP} Models}},
   author    = {Ribeiro, Marco Tulio and Singh, Sameer and Guestrin, Carlos},
   booktitle = {Proceedings of ACL},
   pages     = {856--865},
@@ -74,7 +79,7 @@
 % --- Idioms and figurative language ---------------------------------------
 
 @inproceedings{stowe2022impli,
-  title     = {{IMPLI}: Investigating {NLI} Models' Performance on Figurative Language},
+  title     = {\href{https://aclanthology.org/2022.acl-long.369/}{{IMPLI}: Investigating {NLI} Models' Performance on Figurative Language}},
   author    = {Stowe, Kevin and Utama, Prasetya and Gurevych, Iryna},
   booktitle = {Proceedings of ACL},
   pages     = {5375--5388},
@@ -82,7 +87,7 @@
 }
 
 @inproceedings{mi2025dice,
-  title     = {Rolling the {DICE} on Idiomaticity: How {LLM}s Fail to Grasp Context},
+  title     = {\href{https://aclanthology.org/2025.acl-long.362/}{Rolling the {DICE} on Idiomaticity: How {LLM}s Fail to Grasp Context}},
   author    = {Mi, Maggie and Villavicencio, Aline and Moosavi, Nafise Sadat},
   booktitle = {Proceedings of ACL},
   pages     = {7314--7332},
@@ -90,7 +95,7 @@
 }
 
 @inproceedings{tong2024munch,
-  title     = {Metaphor Understanding Challenge Dataset for {LLM}s},
+  title     = {\href{https://aclanthology.org/2024.acl-long.193/}{Metaphor Understanding Challenge Dataset for {LLM}s}},
   author    = {Tong, Xiaoyu and others},
   booktitle = {Proceedings of ACL},
   pages     = {3517--3536},
@@ -98,7 +103,7 @@
 }
 
 @inproceedings{phelps2024sign,
-  title     = {Sign of the Times: Evaluating the Use of Large Language Models for Idiomaticity Detection},
+  title     = {\href{https://aclanthology.org/2024.mwe-1.22/}{Sign of the Times: Evaluating the Use of Large Language Models for Idiomaticity Detection}},
   author    = {Phelps, Dylan and others},
   booktitle = {Proceedings of the MWE-UD Workshop at LREC-COLING},
   pages     = {178--187},
@@ -110,7 +115,7 @@
 % --- Sensitivity to meaning-preserving input variation --------------------
 
 @inproceedings{cao2024worst,
-  title     = {On the Worst Prompt Performance of Large Language Models},
+  title     = {\href{https://proceedings.neurips.cc/paper_files/paper/2024/hash/7fa5a377b7ffabcce43cd00231bb3f9c-Abstract-Conference.html}{On the Worst Prompt Performance of Large Language Models}},
   author    = {Cao, Bowen and others},
   booktitle = {Advances in Neural Information Processing Systems 37 (NeurIPS)},
   year      = {2024},
@@ -119,7 +124,7 @@
 % --- Figurative language and downstream task accuracy (LLM era) ------------
 
 @inproceedings{sanchezbayona2025metaphor,
-  title     = {Metaphor and Large Language Models: When Surface Features Matter More than Deep Understanding},
+  title     = {\href{https://aclanthology.org/2025.findings-acl.898/}{Metaphor and Large Language Models: When Surface Features Matter More than Deep Understanding}},
   author    = {Sanchez-Bayona, Elisa and Agerri, Rodrigo},
   booktitle = {Findings of the Association for Computational Linguistics: ACL 2025},
   pages     = {17462--17477},
@@ -127,18 +132,17 @@
 }
 
 @misc{yang2026compared,
-  title        = {Compared to What? Baselines and Metrics for Counterfactual Prompting},
+  title        = {\href{https://arxiv.org/abs/2605.01048}{Compared to What? Baselines and Metrics for Counterfactual Prompting}},
   author       = {Yang, Zihao and others},
   year         = {2026},
   eprint       = {2605.01048},
   archivePrefix= {arXiv},
   primaryClass = {cs.CL},
   note         = {Preprint},
-  url          = {https://arxiv.org/abs/2605.01048}
 }
 
 @inproceedings{ziems2022value,
-  title     = {{VALUE}: Understanding Dialect Disparity in {NLU}},
+  title     = {\href{https://aclanthology.org/2022.acl-long.258/}{{VALUE}: Understanding Dialect Disparity in {NLU}}},
   author    = {Ziems, Caleb and others},
   booktitle = {Proceedings of ACL},
   pages     = {3701--3720},
@@ -148,7 +152,7 @@
 % --- Behavioral testing, minimal pairs, and control conditions -------------
 
 @inproceedings{ribeiro2020checklist,
-  title     = {Beyond Accuracy: Behavioral Testing of {NLP} Models with {C}heck{L}ist},
+  title     = {\href{https://aclanthology.org/2020.acl-main.442/}{Beyond Accuracy: Behavioral Testing of {NLP} Models with {C}heck{L}ist}},
   author    = {Ribeiro, Marco Tulio and others},
   booktitle = {Proceedings of ACL},
   pages     = {4902--4912},
@@ -156,7 +160,7 @@
 }
 
 @inproceedings{gardner2020contrast,
-  title     = {Evaluating Models' Local Decision Boundaries via Contrast Sets},
+  title     = {\href{https://aclanthology.org/2020.findings-emnlp.117/}{Evaluating Models' Local Decision Boundaries via Contrast Sets}},
   author    = {Gardner, Matt and Artzi, Yoav and Basmov, Victoria and others},
   booktitle = {Findings of the Association for Computational Linguistics: EMNLP 2020},
   pages     = {1307--1323},
@@ -164,7 +168,7 @@
 }
 
 @inproceedings{hewitt2019control,
-  title     = {Designing and Interpreting Probes with Control Tasks},
+  title     = {\href{https://aclanthology.org/D19-1275/}{Designing and Interpreting Probes with Control Tasks}},
   author    = {Hewitt, John and Liang, Percy},
   booktitle = {Proceedings of EMNLP-IJCNLP},
   pages     = {2733--2743},
@@ -173,9 +177,8 @@
 
 
 @article{hashiloni2026idiolink,
-  title   = {IdioLink: Retrieving Meaning Beyond Words Across Idiomatic and Literal Expressions},
+  title   = {\href{https://arxiv.org/abs/2605.22247}{IdioLink: Retrieving Meaning Beyond Words Across Idiomatic and Literal Expressions}},
   author  = {Golan Hashiloni, Kai and others},
   journal = {arXiv preprint arXiv:2605.22247},
   year    = {2026},
-  url     = {https://arxiv.org/abs/2605.22247}
 }
