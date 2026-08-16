@@ -162,13 +162,19 @@
 
 % ---------------------------------------------------------------------
 \begin{frame}{Datasets \& Models}
-  \textbf{Three datasets}, one rewritten field each:
+  \textbf{Three datasets}, one rewritten field each (in \textbf{bold}):
   \begin{itemize}
-    \item \textbf{SST-2}: sentiment (sentence); \textbf{MMLU}: knowledge QA
-      (question stem); \textbf{MNLI}: inference (premise)
+    \item \textbf{SST-2} (binary classification): label one \textbf{sentence}
+      \emph{positive} or \emph{negative}.
+    \item \textbf{MMLU} (4-way multiple choice): answer a knowledge
+      \textbf{question stem} with \texttt{A}--\texttt{D}; the four choices stay
+      as published.
+    \item \textbf{MNLI} (3-way inference): given a \textbf{premise} and a
+      hypothesis, answer \emph{entailment}, \emph{neutral} or
+      \emph{contradiction}; the hypothesis stays as published.
     \item Aligned triples: 1{,}548, 1{,}085 and 4{,}709 rows
   \end{itemize}
-  \vspace{0.5em}
+  \vspace{0.4em}
   \textbf{14 instruction-tuned decoder LLMs}, 0.5B--7B, 10 families
   (Qwen2.5, Falcon3, OLMo-2, Gemma-2, Mistral, Phi-4-mini, Granite-3.1,
   H2O-Danube3, Yi-1.5, SmolLM2), zero-shot under an identical prompt per dataset.
@@ -187,16 +193,18 @@
   \vspace{0.3em}
   Tested two ways, required to \emph{agree}:
   \begin{itemize}
-    \item \textbf{McNemar} $\chi^2$ with the Edwards continuity correction:
+    \item \textbf{McNemar} $\chi^2$ (\emph{parametric}) with the Edwards
+      continuity correction:
       \[
         \chi^2 = \frac{(|b - c| - 1)^2}{b + c}, \qquad \mathrm{df} = 1
       \]
       null: among discordant rows it is a coin flip which rewrite broke it.
-    \item \textbf{Paired bootstrap}, 10{,}000 resamples of $b - c$, since the
-      $\chi^2$ approximation is unreliable when $b + c$ is small.
+    \item \textbf{Paired bootstrap} (\emph{non-parametric}), 10{,}000 resamples
+      of $b - c$, assuming no distribution, since the $\chi^2$ approximation is
+      unreliable when $b + c$ is small.
   \end{itemize}
-  Both agree in all 42 per-model runs. Also pooled per dataset (indicative, not
-  a mixed-effects model).
+  The parametric and non-parametric verdicts \textbf{agree in all 42 per-model
+  runs}, so no reported result depends on the $\chi^2$ approximation holding.
 \end{frame}
 
 % ---------------------------------------------------------------------
@@ -224,8 +232,7 @@
       individually, $p = 0.0011$ pooled).
   \end{itemize}
   \vspace{0.2em}
-  Idiomaticity is not a general accuracy tax: any account has to explain a
-  change of \emph{sign} across tasks.
+  Not a general accuracy tax: the effect flips \emph{sign} across tasks.
 \end{frame}
 
 % ---------------------------------------------------------------------
@@ -323,7 +330,7 @@
 \end{frame}
 
 % ---------------------------------------------------------------------
-\begin{frame}{Key Insight: The Control Arm Changes the Story}
+\begin{frame}{The Control Arm Changes the Story}
   \begin{columns}[T]
     \begin{column}{0.46\textwidth}
       \vspace{0.4em}
@@ -355,15 +362,14 @@
     \end{column}
     \begin{column}{0.52\textwidth}
       \begin{itemize}
-        \item Score idiomatic against \emph{original}, as a study without a
-          control arm must, and SST-2 looks like a null ($+0.07$~pp) while
-          MNLI's cost is overstated by roughly 53\%.
+        \item Without a control arm, idiomatic can only be scored against
+          \emph{original}: SST-2 then reads as a null ($+0.07$~pp) and MNLI's
+          cost is overstated by roughly 53\%.
         \item The matched arm splits that false null into two real cancelling
-          effects and cuts MNLI's to its idiom-specific size. Neither
-          correction is visible without it.
-        \item The magnitudes are real but modest: a 1--2~pp MNLI drop is the
-          same order as plain rewording's own cost, not an order above it.
-        \item So idiomaticity is one \textbf{distinguishable contributor} to
+          effects and cuts MNLI to its idiom-specific size.
+        \item Modest magnitudes: MNLI's 1--2~pp is the same order as plain
+          rewording's own cost, not an order above it.
+        \item So idiomaticity is a \textbf{distinguishable contributor} to
           paraphrase sensitivity, not a separate failure mode.
       \end{itemize}
     \end{column}
@@ -401,16 +407,18 @@
     \end{column}
     \begin{column}{0.53\textwidth}
       \begin{itemize}
-        \item $\Delta_{\text{idi}}$ correlates with neither original accuracy
-          nor parameter count ($p > 0.3$ on all three datasets).
-        \item The Qwen2.5 ladder shows it concretely: MNLI's penalty is
-          non-monotone at $-0.40$, $-1.59$, $-1.17$~pp across 0.5B, 1.5B and 7B,
-          and all four 7B models sit inside the degraded group.
-        \item With 14 models, $|\rho|$ must reach about $0.53$ before the test
-          can call anything significant: absence of evidence, not evidence of
-          absence.
-        \item Takeaway: \textbf{nothing here supports waiting for a larger
-          checkpoint}, and settling the question needs many more models than 14.
+        \item Across the 14 models, $\Delta_{\text{idi}}$ correlates with
+          neither a model's parameter count nor its own accuracy on the
+          original variant (Spearman per dataset, none significant): bigger and
+          stronger models are not less affected.
+        \item The Qwen2.5 ladder is non-monotone on MNLI ($-0.40$, $-1.59$,
+          $-1.17$~pp at 0.5B/1.5B/7B); all four 7B models sit in the degraded
+          group.
+        \item That null is weak: with 14 points a Spearman test needs
+          $|\rho| \geq 0.53$ to reach $p < 0.05$, and the largest of the six
+          observed is $0.30$. A moderate trend would go undetected.
+        \item \textbf{Nothing supports waiting for a larger checkpoint};
+          settling it needs far more models.
       \end{itemize}
     \end{column}
   \end{columns}
@@ -421,8 +429,14 @@
   \begin{itemize}
     \item Parse-failure filtering is blunt and non-random (up to 12.4\% dropped
       for one model/dataset pair).
-    \item Pooled tests treat repeated rows as independent, giving optimistic p-values.
-    \item No multiple-comparisons correction; no mixed-effects re-analysis.
+    \item Pooled tests treat repeated rows as independent, giving optimistic
+      p-values. The fix is a mixed-effects model with a random effect per row,
+      which we did not run: it would let a row that is idiom-hard for many
+      models count once rather than 14 times, widening the pooled intervals.
+      That falls hardest on MMLU, whose result rests on pooling alone.
+    \item No multiple-comparisons correction: 14 tests at $\alpha = 0.05$
+      expect 0.7 hits under a true null, so MMLU's single significant model
+      carries little weight.
     \item Zero-shot, greedy decoding, single prompt template, decoder-only panel.
   \end{itemize}
 \end{frame}
@@ -432,14 +446,25 @@
   \begin{itemize}
     \item Verify rewrites preserve meaning; run a mixed-effects re-analysis of
       the pooled claims.
-    \item Score idiom \emph{opacity} and \emph{frequency} against
-      $\Delta_{\text{idi}}$. Both reuse the rewritten text already collected,
-      but Stage 2 recorded no inventory of which idiom it inserted, so each
-      row's idiom must be identified first.
+    \item Correlate $\Delta_{\text{idi}}$ with two per-idiom properties, rather
+      than counting every idiom the same:
+      \begin{itemize}
+        \item \emph{opacity}: how far the idiom's meaning sits from its
+          literal words (psycholinguistic norms). If the cost is
+          non-compositionality, opaque idioms should cost more.
+        \item \emph{frequency}: corpus counts, a proxy for pretraining
+          exposure. If rarer idioms cost more, that is the familiarity account.
+      \end{itemize}
+      Both reuse the text already collected, but Stage 2 recorded no inventory
+      of which idiom it inserted, so each row's idiom must be identified first.
     \item Rewrite MNLI's hypothesis or MMLU's answer choices too, making idiom
       position a manipulated variable \emph{within} one dataset.
-    \item Try to \emph{reduce} the penalty: few-shot prompting, and brief
-      fine-tuning to test whether it is a fixable exposure gap.
+    \item Few-shot prompting: the cheap win is general accuracy and output
+      format, cutting the parse failures that contaminate SST-2. The idiom
+      penalty may not move at all.
+    \item Brief fine-tuning on labelled idiomatic rewrites: the intervention
+      aimed at the MNLI penalty itself, testing whether it is a fixable gap in
+      exposure.
   \end{itemize}
 \end{frame}
 

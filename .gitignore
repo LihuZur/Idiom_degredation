@@ -12,6 +12,8 @@ NLP_2024_Reichman/*.toc
 NLP_2024_Reichman/*.fls
 NLP_2024_Reichman/*.fdb_latexmk
 NLP_2024_Reichman/*.synctex.gz
+NLP_2024_Reichman/*.nav
+NLP_2024_Reichman/*.snm
 
 # C extensions
 *.so
