@@ -471,21 +471,15 @@
 % ---------------------------------------------------------------------
 \begin{frame}{Summary}
   \begin{itemize}
-    \item We measured the accuracy cost of idiomatic phrasing for 14
-      instruction-tuned decoder LLMs (0.5B--7B) on SST-2, MMLU and MNLI, pairing
-      every idiomatic rewrite with a matched non-idiomatic paraphrase of the
-      same row, so the cost of rewording is subtracted rather than absorbed.
-    \item That control is what makes the result readable: without it SST-2 looks
-      like a null and MNLI's idiom-specific penalty is overstated by roughly
-      53\%.
-    \item With it the penalty concentrates on \textbf{MNLI}: $-1.28$~pp,
-      significant for 10 of the 14 models, against $-0.79$~pp on MMLU with a
-      single significant model and no penalty at all on binary sentiment. These
-      are means across models, not pooled figures.
-    \item Idiomaticity is therefore a distinguishable contributor to paraphrase
-      sensitivity rather than a separate failure mode. No scale trend is
-      detectable across a 14-fold parameter range, though a panel of 14 models
-      could not have detected a moderate one.
+    \item 14 instruction-tuned decoder LLMs (0.5B--7B), 3 datasets, every
+      idiomatic rewrite matched to a non-idiomatic paraphrase of the same row.
+    \item The control arm is what makes the result readable: without it SST-2
+      reads as a null and MNLI is overstated by 53\%.
+    \item The penalty is \textbf{MNLI's}: $-1.28$~pp, 10 of 14 models. MMLU
+      $-0.79$ (1 of 14); sentiment none. Means across models.
+    \item Idiomaticity is a distinguishable contributor to paraphrase
+      sensitivity, not a separate failure mode. No scale trend, but 14 models
+      could not have found a moderate one.
   \end{itemize}
 \end{frame}
 
