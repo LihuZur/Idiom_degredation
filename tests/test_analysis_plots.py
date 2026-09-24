@@ -7,7 +7,7 @@ import pytest
 
 from analysis.aggregate import bootstrap_by_run
 from analysis.plots import (
-    _has_resolved_delta,
+    _has_resolved_delta,  # pyright: ignore[reportPrivateUsage]  # tested directly below
     plot_cross_dataset_summary,
     plot_dataset_cross_model,
 )

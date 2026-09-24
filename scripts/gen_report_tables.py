@@ -23,6 +23,7 @@ import csv
 import json
 import re
 from pathlib import Path
+from typing import Any, cast
 
 import pandas as pd
 from scipy.stats import binomtest
@@ -88,11 +89,14 @@ def sole_cause(ds: str) -> dict[str, dict[str, float]]:
         with (base / "tables" / f"{model}_bootstrap.csv").open(encoding="utf-8") as f:
             boot = next(iter(csv.DictReader(f)))
         rep = (base / "reports" / f"{model}_chi2_report.md").read_text(encoding="utf-8")
+        chi2_match = re.search(r"chi2 = ([\d.]+), df", rep)
+        mcn_p_match = re.search(r"p-value = ([\d.eE+-]+)", rep)
+        assert chi2_match and mcn_p_match, f"chi2 report missing expected fields: {rep!r}"
         out[model] = {
             "b": counts["idiomatic_only_wrong"],
             "c": counts["paraphrase_only_wrong"],
-            "chi2": float(re.search(r"chi2 = ([\d.]+), df", rep).group(1)),
-            "mcn_p": float(re.search(r"p-value = ([\d.eE+-]+)", rep).group(1)),
+            "chi2": float(chi2_match.group(1)),
+            "mcn_p": float(mcn_p_match.group(1)),
             "boot_p": float(boot["p_value"]),
             "ci_low": float(boot["ci_low"]),
             "ci_high": float(boot["ci_high"]),
@@ -113,7 +117,7 @@ def parse_clean(ds: str) -> pd.DataFrame:
             if all(it[v]["parse_status"] == "ok" for v in ("original", "paraphrase", "idiomatic"))
         ]
 
-        def acc(items: list[dict], v: str) -> float:
+        def acc(items: list[dict[str, Any]], v: str) -> float:
             return sum(1 for it in items if it[v]["correct"]) / len(items)
 
         b = sum(1 for it in keep if it["idiomatic"]["correct"] and not it["paraphrase"]["correct"])
@@ -138,7 +142,7 @@ def main() -> None:
     # ---- Table 1: dataset-level summary, including the parse-clean check ----
     rows = []
     for ds in DATASETS:
-        sub = summary[summary.dataset == ds]
+        sub = cast(pd.DataFrame, summary[summary.dataset == ds])
         sc = sole_cause(ds)
         pooled = sc["pooled"]
         clean = parse_clean(ds)
@@ -210,7 +214,7 @@ Dataset & Models & $n$ & $\Delta_{\text{par}}$ & $\Delta_{\text{idi}}$ & sig.
     def row(mid: str) -> str:
         cells = [DISPLAY[mid]]
         for ds in DATASETS:
-            sub = summary[(summary.dataset == ds) & (summary.model_id == mid)]
+            sub = cast(pd.DataFrame, summary[(summary.dataset == ds) & (summary.model_id == mid)])
             if sub.empty:
                 cells.append("---")
                 continue

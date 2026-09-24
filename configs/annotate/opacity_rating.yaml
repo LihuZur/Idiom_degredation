@@ -1,0 +1,20 @@
+prompt_file: opacity_rating_v1.txt
+
+extractor:
+  provider: openai
+  model: gpt-5.6-luna
+  temperature: 1.0  # gpt-5.6-luna rejects any value but the default (1.0)
+
+decoding:
+  temperature: 0.0
+  max_output_tokens: 1024
+
+retry:
+  max_attempts: 5
+  backoff_seconds: 2.0
+
+cache:
+  enabled: true
+  dir: .hf_cache/opacity_rating
+
+output_dir: datasets_out

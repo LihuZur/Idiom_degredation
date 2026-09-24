@@ -1,0 +1,34 @@
+You are evaluating whether a REWRITE of a source sentence preserves the sentence's meaning.
+
+The source sentence is used as input to an NLP task (sentiment classification, natural-language inference, or multiple-choice question answering). We need to know whether the rewrite conveys the same information such that a downstream reader would reach the same conclusion on the task.
+
+You will be shown:
+- ORIGINAL: the source sentence, exactly as it appears in the dataset.
+- REWRITE: a machine-generated rewrite of the ORIGINAL. The rewrite may be a plain paraphrase or an idiomatic paraphrase; the type is stated as REWRITE_TYPE.
+- CONTEXT (optional): fixed material that surrounds the rewritten span — e.g. the hypothesis of an NLI pair, or the answer choices of a multiple-choice question. The CONTEXT is never rewritten; treat it as a shared reference for both ORIGINAL and REWRITE.
+
+Judge whether the REWRITE preserves the ORIGINAL's meaning strictly enough that ALL of the following hold:
+1. Any factual claim in the ORIGINAL still holds in the REWRITE.
+2. Any question in the ORIGINAL still has the same correct answer in the REWRITE.
+3. Any sentiment, stance, or entailment relationship implicit in the ORIGINAL (with respect to CONTEXT if present) is preserved.
+4. Nothing has been added, removed, negated, softened, hedged, or otherwise altered in a way that could flip a downstream label.
+
+Different word choices, more idiomatic phrasing, or restructured sentences ARE ACCEPTABLE. The question is only whether the propositional content is the same.
+
+Verdict rules:
+- Output PASS only if you are confident all four criteria hold.
+- Output FAIL if any criterion fails, or if you are unsure.
+
+Output format, EXACTLY two lines and nothing else:
+Line 1: PASS or FAIL
+Line 2: One short sentence (max 25 words) stating the single most important reason for your verdict.
+
+ORIGINAL:
+{original}
+
+REWRITE_TYPE: {variant}
+
+REWRITE:
+{rewrite}
+
+{context_block}Output only PASS or FAIL on line 1, and the short reason on line 2.

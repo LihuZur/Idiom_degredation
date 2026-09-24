@@ -5,7 +5,14 @@ from pathlib import Path
 
 import pandas as pd
 
-from analysis.results import ResultFile, correct_by_variant, discover_results, load_result
+from analysis.results import (
+    ResultFile,
+    correct_by_variant,
+    discover_results,
+    filter_to_accepted,
+    load_accepted_ids,
+    load_result,
+)
 from analysis.stats import BootstrapResult, paired_bootstrap
 
 _COLUMNS = [
@@ -43,6 +50,8 @@ def bootstrap_by_run(
     n_resamples: int,
     ci: float,
     seed: int,
+    accepted_only: bool = False,
+    datasets_dir: Path = Path("datasets_out"),
 ) -> list[RunStats]:
     """Load every discovered result file and compute its paired bootstrap.
 
@@ -51,13 +60,29 @@ def bootstrap_by_run(
         n_resamples: Number of bootstrap resamples to draw per run.
         ci: Confidence level in (0, 1) for the bootstrap intervals.
         seed: RNG seed for bootstrap resampling (shared across runs).
+        accepted_only: If True, restrict each run's `per_task` to ids with
+            `accepted_pair=True` in ``datasets_dir/{dataset}/meaning_accept.csv``
+            (RQ1 §5 step 7), looked up once per dataset and cached.
+        datasets_dir: Root directory containing ``{dataset}/meaning_accept.csv``
+            files; only consulted when `accepted_only` is True.
 
     Returns:
         One `RunStats` per discovered result file, in discovery order.
+
+    Raises:
+        FileNotFoundError: If `accepted_only` is True and a discovered
+            dataset has no ``meaning_accept.csv`` under `datasets_dir`.
     """
+    accepted_ids_by_dataset: dict[str, frozenset[str]] = {}
     stats: list[RunStats] = []
     for path in discover_results(results_dir):
         result = load_result(path)
+        if accepted_only:
+            if result.dataset not in accepted_ids_by_dataset:
+                accepted_ids_by_dataset[result.dataset] = load_accepted_ids(
+                    datasets_dir / result.dataset / "meaning_accept.csv"
+                )
+            result = filter_to_accepted(result, accepted_ids_by_dataset[result.dataset])
         boot = paired_bootstrap(
             correct_by_variant(result),
             n_resamples=n_resamples,
@@ -74,6 +99,8 @@ def aggregate(
     n_resamples: int,
     ci: float,
     seed: int,
+    accepted_only: bool = False,
+    datasets_dir: Path = Path("datasets_out"),
 ) -> pd.DataFrame:
     """Build a one-row-per-(dataset, model) summary table of bootstrap statistics.
 
@@ -82,6 +109,10 @@ def aggregate(
         n_resamples: Number of bootstrap resamples to draw per run.
         ci: Confidence level in (0, 1) for the bootstrap intervals.
         seed: RNG seed for bootstrap resampling (shared across runs).
+        accepted_only: If True, restrict each run to its RQ1-accepted id
+            subset before bootstrapping (see `bootstrap_by_run`).
+        datasets_dir: Root directory containing ``{dataset}/meaning_accept.csv``
+            files; only consulted when `accepted_only` is True.
 
     Returns:
         A DataFrame with columns `dataset, model_id, model_revision,
@@ -92,7 +123,14 @@ def aggregate(
         per result file, in discovery order.
     """
     rows: list[dict[str, str | int | float]] = []
-    for run in bootstrap_by_run(results_dir, n_resamples=n_resamples, ci=ci, seed=seed):
+    for run in bootstrap_by_run(
+        results_dir,
+        n_resamples=n_resamples,
+        ci=ci,
+        seed=seed,
+        accepted_only=accepted_only,
+        datasets_dir=datasets_dir,
+    ):
         result = run.result
         boot = run.boot
         rows.append(

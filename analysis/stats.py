@@ -88,6 +88,70 @@ def mcnemar_exact_p(a: NDArray[np.float64], b: NDArray[np.float64]) -> float:
     return float(binomtest(successes, n_discordant, 0.5, alternative="two-sided").pvalue)
 
 
+def cohen_kappa(a: Sequence[bool], b: Sequence[bool]) -> float:
+    """Cohen's kappa for two raters' paired binary judgments (RQ1 H1d/H1e).
+
+    Args:
+        a: First rater's binary judgments.
+        b: Second rater's judgments, paired 1:1 with ``a`` (same item order).
+
+    Returns:
+        Kappa in ``[-1, 1]``; `1.0` when raters agree perfectly and would
+        otherwise divide by zero (no disagreement possible by chance either,
+        e.g. both raters always say the same single class).
+
+    Raises:
+        ValueError: If ``a`` and ``b`` have different lengths, or either is empty.
+    """
+    if len(a) != len(b):
+        raise ValueError(f"a and b must have equal length; got {len(a)} vs {len(b)}")
+    if not a:
+        raise ValueError("cohen_kappa requires at least one paired judgment")
+    a_arr = np.asarray(a, dtype=bool)
+    b_arr = np.asarray(b, dtype=bool)
+    po = float(np.mean(a_arr == b_arr))
+    p_a_true = float(np.mean(a_arr))
+    p_b_true = float(np.mean(b_arr))
+    pe = p_a_true * p_b_true + (1 - p_a_true) * (1 - p_b_true)
+    if pe >= 1.0:
+        return 1.0
+    return (po - pe) / (1 - pe)
+
+
+def gwet_ac1(a: Sequence[bool], b: Sequence[bool]) -> float:
+    """Gwet's AC1 for two raters' paired binary judgments.
+
+    Unlike Cohen's kappa, AC1's chance-agreement term does not blow up when
+    the pooled prevalence is skewed near 0 or 1 (the "kappa paradox": high
+    raw agreement but near-zero kappa under extreme marginals) — prefer this
+    over `cohen_kappa` when one or both raters say "true" on the vast
+    majority of items.
+
+    Args:
+        a: First rater's binary judgments.
+        b: Second rater's judgments, paired 1:1 with ``a`` (same item order).
+
+    Returns:
+        AC1 in ``[-1, 1]``; `1.0` when raters agree perfectly and would
+        otherwise divide by zero (no disagreement possible by chance either).
+
+    Raises:
+        ValueError: If ``a`` and ``b`` have different lengths, or either is empty.
+    """
+    if len(a) != len(b):
+        raise ValueError(f"a and b must have equal length; got {len(a)} vs {len(b)}")
+    if not a:
+        raise ValueError("gwet_ac1 requires at least one paired judgment")
+    a_arr = np.asarray(a, dtype=bool)
+    b_arr = np.asarray(b, dtype=bool)
+    po = float(np.mean(a_arr == b_arr))
+    pi_true = (float(np.mean(a_arr)) + float(np.mean(b_arr))) / 2
+    pe = 2 * pi_true * (1 - pi_true)
+    if pe >= 1.0:
+        return 1.0
+    return (po - pe) / (1 - pe)
+
+
 def paired_bootstrap(
     correct_by_variant: Mapping[str, Sequence[bool]],
     *,

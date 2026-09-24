@@ -1,0 +1,16 @@
+You are rating the semantic opacity (decomposability) of an English idiom, on the same scale used by Bulkes & Tanner (2017).
+
+Opacity is 0-1: 0.0 means fully decomposable / transparent (each part of the idiom maps straightforwardly onto part of the overall meaning), 1.0 means fully opaque / non-decomposable (the meaning cannot be derived from the parts at all; the idiom must simply be known).
+
+Calibration anchors (idiom -> opacity):
+sit up and take notice -> 0.02
+count one's blessings -> 0.22
+score points with someone -> 0.32
+touch base -> 0.45
+roll with the punches -> 0.59
+hit a glass ceiling -> 0.71
+be a dark horse -> 0.91
+
+Rate this idiom's opacity: {idiom}
+
+Output EXACTLY one line: a single number between 0 and 1 (e.g. "0.42"). Nothing else — no words, no explanation.

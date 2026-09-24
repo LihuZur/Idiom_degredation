@@ -10,7 +10,7 @@ than printing stale numbers if the underlying results change.
 """
 
 from pathlib import Path
-from typing import TypedDict
+from typing import Any, TypedDict, cast
 
 import click
 import numpy as np
@@ -71,15 +71,15 @@ def _trends(tables: Path, dataset: str) -> Trend:
     assert set(df.model_id) == set(PARAMS_B), f"{dataset}: panel != PARAMS_B keys"
     params = df.model_id.map(PARAMS_B)
 
-    rho_acc, p_acc = spearmanr(df.delta_idiom, df.acc_original)
-    rho_par, p_par = spearmanr(df.delta_idiom, params)
+    acc_result = cast(Any, spearmanr(df.delta_idiom, df.acc_original))
+    par_result = cast(Any, spearmanr(df.delta_idiom, params))
     sig = df.delta_idiom_p < ALPHA
     return Trend(
         n=len(df),
-        rho_acc=float(rho_acc),
-        p_acc=float(p_acc),
-        rho_par=float(rho_par),
-        p_par=float(p_par),
+        rho_acc=float(acc_result.statistic),
+        p_acc=float(acc_result.pvalue),
+        rho_par=float(par_result.statistic),
+        p_par=float(par_result.pvalue),
         sig_neg=int((sig & (df.delta_idiom < 0)).sum()),
         sig_pos=int((sig & (df.delta_idiom > 0)).sum()),
     )

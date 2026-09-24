@@ -7,6 +7,8 @@ from scipy.stats import binomtest
 from analysis.stats import (
     BootstrapResult,
     accuracy_from_correct,
+    cohen_kappa,
+    gwet_ac1,
     mcnemar_exact_p,
     paired_bootstrap,
 )
@@ -122,3 +124,62 @@ def test_paired_bootstrap_rejects_unequal_length_variants() -> None:
             ci=_CI,
             seed=_SEED,
         )
+
+
+def test_cohen_kappa_perfect_agreement_is_one() -> None:
+    a = [True, False, True, True, False, False]
+    assert cohen_kappa(a, a) == pytest.approx(1.0)
+
+
+def test_cohen_kappa_known_value() -> None:
+    # Standard textbook example: 2x2 confusion counts
+    # agree-true=20, a-true/b-false=5, a-false/b-true=10, agree-false=15 (n=50).
+    a = [True] * 25 + [False] * 25
+    b = [True] * 20 + [False] * 5 + [True] * 10 + [False] * 15
+    po = (20 + 15) / 50
+    pe = (25 / 50) * (30 / 50) + (25 / 50) * (20 / 50)
+    expected = (po - pe) / (1 - pe)
+    assert cohen_kappa(a, b) == pytest.approx(expected)
+
+
+def test_cohen_kappa_rejects_unequal_length() -> None:
+    with pytest.raises(ValueError, match="equal length"):
+        cohen_kappa([True, False], [True])
+
+
+def test_cohen_kappa_rejects_empty() -> None:
+    with pytest.raises(ValueError, match="at least one"):
+        cohen_kappa([], [])
+
+
+def test_cohen_kappa_all_same_class_both_raters_is_one() -> None:
+    # No possible disagreement and no chance-agreement headroom -> defined as 1.0.
+    assert cohen_kappa([True, True, True], [True, True, True]) == 1.0
+
+
+def test_gwet_ac1_perfect_agreement_is_one() -> None:
+    a = [True, False, True, True, False, False]
+    assert gwet_ac1(a, a) == pytest.approx(1.0)
+
+
+def test_gwet_ac1_rejects_unequal_length() -> None:
+    with pytest.raises(ValueError, match="equal length"):
+        gwet_ac1([True, False], [True])
+
+
+def test_gwet_ac1_rejects_empty() -> None:
+    with pytest.raises(ValueError, match="at least one"):
+        gwet_ac1([], [])
+
+
+def test_gwet_ac1_stays_high_under_skewed_prevalence_where_kappa_collapses() -> None:
+    # 18/20 raw agreement with near-uniform "True" prevalence: kappa's chance-agreement
+    # term inflates toward 1 under this skew and collapses kappa well below raw agreement,
+    # while AC1 is designed to track raw agreement more closely in this regime.
+    a = [True] * 19 + [False]
+    b = [True] * 17 + [False] * 2 + [True]
+    kappa = cohen_kappa(a, b)
+    ac1 = gwet_ac1(a, b)
+    raw_agreement = sum(x == y for x, y in zip(a, b, strict=True)) / len(a)
+    assert kappa < ac1
+    assert ac1 == pytest.approx(raw_agreement, abs=0.15)

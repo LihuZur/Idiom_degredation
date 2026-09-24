@@ -21,6 +21,13 @@ _HYPOTHESIS_BLOCK = (
     "{hypothesis}"
 )
 
+_PREMISE_BLOCK = (
+    "Premise (fixed reference — it is never rewritten; the rewritten text must\n"
+    "preserve exactly the same logical relationship to it, and must not restate,\n"
+    "quote, negate, or otherwise give away that relationship):\n"
+    "{premise}"
+)
+
 
 def render_context(meta: dict[str, Any]) -> str:
     """Render read-only reference context for an augmenter prompt's `{context}` slot.
@@ -35,6 +42,9 @@ def render_context(meta: dict[str, Any]) -> str:
     - `hypothesis` — the fixed half of a sentence-pair item (e.g. MNLI). Required:
       an entailment label is a *relation* between premise and hypothesis, so the
       `label_preservation` judge cannot decide one without seeing both sides.
+    - `premise` — the fixed half of a sentence-pair item when the *hypothesis* is
+      the field being rewritten instead (RQ3 §4 position variation). Mutually
+      exclusive with `hypothesis` in practice (a loader emits one or the other).
     - `label_name` — the gold label in words, for datasets whose `y` is an opaque
       integer code.
 
@@ -59,6 +69,10 @@ def render_context(meta: dict[str, Any]) -> str:
     hypothesis = meta.get("hypothesis")
     if isinstance(hypothesis, str) and hypothesis:
         sections.append(_HYPOTHESIS_BLOCK.format(hypothesis=hypothesis))
+
+    premise = meta.get("premise")
+    if isinstance(premise, str) and premise:
+        sections.append(_PREMISE_BLOCK.format(premise=premise))
 
     label_name = meta.get("label_name")
     if isinstance(label_name, str) and label_name:

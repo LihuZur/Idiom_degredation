@@ -5,6 +5,7 @@ the "complete-triple" invariant: every loaded run must have run and recorded
 all three variants (original, paraphrase, idiomatic) for every task.
 """
 
+import csv
 import json
 from pathlib import Path
 
@@ -122,3 +123,40 @@ def correct_by_variant(result: ResultFile) -> dict[str, list[bool]]:
         length, same task order.
     """
     return {v: [task.variants[v].correct for task in result.per_task] for v in VARIANTS}
+
+
+def filter_to_accepted(result: ResultFile, accepted_ids: frozenset[str]) -> ResultFile:
+    """Restrict a `ResultFile` to `per_task` entries whose id is accepted.
+
+    Args:
+        result: A loaded, validated `ResultFile`.
+        accepted_ids: Ids to keep (e.g. from `meaning_preservation.load_accepted_ids`).
+
+    Returns:
+        A copy of `result` with `per_task` filtered to `accepted_ids`; all
+        other fields are unchanged.
+    """
+    return result.model_copy(
+        update={"per_task": [t for t in result.per_task if t.id in accepted_ids]}
+    )
+
+
+def load_accepted_ids(meaning_accept_csv: Path) -> frozenset[str]:
+    """Read the accepted row ids from a `meaning_preservation.compute_accept_rule` output CSV.
+
+    Args:
+        meaning_accept_csv: Path to a `meaning_accept.csv` file.
+
+    Returns:
+        The frozenset of `id` values with `accepted_pair == "True"`.
+
+    Raises:
+        FileNotFoundError: If `meaning_accept_csv` does not exist.
+    """
+    if not meaning_accept_csv.exists():
+        raise FileNotFoundError(f"No accept-rule file found at {meaning_accept_csv}")
+    with meaning_accept_csv.open(encoding="utf-8", newline="") as f:
+        reader = csv.DictReader(f)
+        return frozenset(
+            row["id"] for row in reader if row.get("accepted_pair", "").strip() == "True"
+        )

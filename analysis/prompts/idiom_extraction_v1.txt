@@ -1,0 +1,23 @@
+You are identifying which idiomatic expression(s) a paraphrasing system inserted into a sentence.
+
+You will be shown three versions of the same underlying sentence:
+- ORIGINAL: the source sentence, exactly as it appears in the dataset.
+- PARAPHRASE: a neutral, non-idiomatic rewrite of ORIGINAL that preserves the same meaning.
+- IDIOMATIC: a rewrite of ORIGINAL that inserts one or more idioms in place of some literal phrase, while preserving the same meaning as ORIGINAL and PARAPHRASE.
+
+Compare IDIOMATIC against ORIGINAL and PARAPHRASE and identify the exact idiomatic expression(s) that were inserted into IDIOMATIC. Report the idiom's surface wording exactly as it appears in IDIOMATIC (inflection is fine — e.g. "kicked the bucket" for the idiom "kick the bucket" — but do not paraphrase or normalize the idiom itself).
+
+Output format, EXACTLY one idiom per line, lowercase, nothing else:
+- If IDIOMATIC contains one or more inserted idioms, output each one on its own line.
+- If IDIOMATIC does not actually contain an inserted idiom, output exactly: NONE
+
+ORIGINAL:
+{original}
+
+PARAPHRASE:
+{paraphrase}
+
+IDIOMATIC:
+{idiomatic}
+
+Output only the idiom(s), one per line, or NONE. Nothing else.

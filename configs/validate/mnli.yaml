@@ -1,0 +1,38 @@
+# RQ1 meaning-preservation judge pass — MNLI (largest; run last after MMLU + SST-2 land).
+# See paper_preparations/RQ1_meaning_preservation.md §5.
+
+dataset: mnli
+
+prompt_file: meaning_preservation_v1.txt
+
+judges:
+  - provider: openai
+    model: gpt-5.6-sol
+    # Entire gpt-5.6 family is reasoning-locked to temperature=1 (vendor-side).
+    temperature: 1.0
+  - provider: anthropic
+    model: claude-sonnet-4-5
+
+decoding:
+  # Global default; used by Claude (fully deterministic). OpenAI overrides
+  # via judges[].temperature above since gpt-5.6-* rejects anything but 1.0.
+  temperature: 0.0
+  # 512 (bumped from 128 for the same EmptyResponseError issue on other
+  # datasets) was still only enough for gpt-5.6-sol on ~15% of mnli pairs
+  # (85% skip rate observed 2026-09-16) — mnli's longer premise/hypothesis
+  # reasoning chains eat far more invisible reasoning tokens than sst2/mmlu's
+  # shorter inputs. Bumped further to give real headroom.
+  max_output_tokens: 1536
+
+retry:
+  max_attempts: 3
+  backoff_seconds: 2.0
+
+cache:
+  enabled: true
+  dir: .hf_cache/validate
+
+limits:
+  max_pairs: null
+
+output_dir: datasets_out

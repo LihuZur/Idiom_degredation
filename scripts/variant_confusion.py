@@ -51,6 +51,7 @@ from plotly.colors import sample_colorscale
 from scipy.stats import chi2 as chi2_dist
 
 from analysis.io import write_markdown, write_sidecar, write_table
+from analysis.results import load_accepted_ids as _load_accepted_ids
 
 VARIANTS: tuple[str, str, str] = ("original", "paraphrase", "idiomatic")
 ALPHA = 0.05  # significance threshold used in the written conclusions
@@ -80,16 +81,21 @@ def load_per_task(results_dir: Path, dataset: str, model_id: str) -> list[dict[s
     return per_task
 
 
-def aligned_correctness(per_task: list[dict[str, Any]]) -> dict[str, tuple[bool, bool, bool]]:
+def aligned_correctness(
+    per_task: list[dict[str, Any]], *, accepted_ids: frozenset[str] | None = None
+) -> dict[str, tuple[bool, bool, bool]]:
     """Restrict to items with all 3 variants present.
 
     Args:
         per_task: The raw `per_task` list from a result file.
+        accepted_ids: If given (RQ1 meaning-preservation accept rule), also
+            restrict to ids present in this set.
 
     Returns:
         A mapping from task id to `(original_correct, paraphrase_correct,
         idiomatic_correct)`, including only ids where all three variant
-        sub-objects are present in the entry.
+        sub-objects are present in the entry (and, if `accepted_ids` is
+        given, only ids in that set).
     """
     out: dict[str, tuple[bool, bool, bool]] = {}
     for entry in per_task:
@@ -98,12 +104,34 @@ def aligned_correctness(per_task: list[dict[str, Any]]) -> dict[str, tuple[bool,
         idiomatic = entry.get("idiomatic")
         if original is None or paraphrase is None or idiomatic is None:
             continue
-        out[str(entry["id"])] = (
+        task_id = str(entry["id"])
+        if accepted_ids is not None and task_id not in accepted_ids:
+            continue
+        out[task_id] = (
             bool(original["correct"]),
             bool(paraphrase["correct"]),
             bool(idiomatic["correct"]),
         )
     return out
+
+
+def load_accepted_ids(meaning_accept_csv: Path) -> frozenset[str]:
+    """Load the set of `id`s with `accepted_pair=True` from a `meaning_accept.csv`.
+
+    Args:
+        meaning_accept_csv: Path to a `datasets_out/{dataset}/meaning_accept.csv`
+            file, as written by `analysis.meaning_preservation.compute_accept_rule`.
+
+    Returns:
+        The frozenset of accepted `id`s.
+
+    Raises:
+        click.ClickException: If the file does not exist.
+    """
+    try:
+        return _load_accepted_ids(meaning_accept_csv)
+    except FileNotFoundError as exc:
+        raise click.ClickException(str(exc)) from exc
 
 
 def load_row_text(datasets_dir: Path, dataset: str) -> dict[tuple[str, str], dict[str, str]]:
@@ -597,6 +625,7 @@ def process_model(
     *,
     n_boot: int,
     boot_seed: int,
+    accepted_ids: frozenset[str] | None = None,
 ) -> tuple[int, int, int, int, list[tuple[bool, bool, bool]]]:
     """Run the full per-model analysis and write its table/figure/report outputs.
 
@@ -606,7 +635,7 @@ def process_model(
         caller to pool into a combined bootstrap across models.
     """
     per_task = load_per_task(results_dir, dataset, model_id)
-    aligned = aligned_correctness(per_task)
+    aligned = aligned_correctness(per_task, accepted_ids=accepted_ids)
     n = len(aligned)
     if n == 0:
         click.echo(f"{model_id}: no items with all 3 variants present - skipping")
@@ -769,15 +798,21 @@ def process_dataset(
     force: bool,
     n_boot: int,
     boot_seed: int,
+    accepted_only: bool,
 ) -> None:
     """Run the full per-model (+ pooled) analysis for one dataset and write all outputs."""
-    dataset_out_dir = out_dir / dataset
+    dataset_out_dir = out_dir / (f"{dataset}_accepted" if accepted_only else dataset)
     if dataset_out_dir.exists() and not force:
         raise click.ClickException(
             f"Output dir exists (use --force to overwrite): {dataset_out_dir}"
         )
 
-    click.echo(f"\n{'=' * 70}\nDataset: {dataset}")
+    accepted_ids: frozenset[str] | None = None
+    if accepted_only:
+        accepted_ids = load_accepted_ids(datasets_dir / dataset / "meaning_accept.csv")
+        click.echo(f"\n{'=' * 70}\nDataset: {dataset} (accepted-only: {len(accepted_ids)} ids)")
+    else:
+        click.echo(f"\n{'=' * 70}\nDataset: {dataset}")
     row_text = load_row_text(datasets_dir, dataset)
 
     pooled_n = pooled_idiom = pooled_para = pooled_orig = 0
@@ -791,6 +826,7 @@ def process_dataset(
             dataset_out_dir,
             n_boot=n_boot,
             boot_seed=boot_seed,
+            accepted_ids=accepted_ids,
         )
         pooled_n += n
         pooled_idiom += sole_idiom
@@ -812,7 +848,13 @@ def process_dataset(
         )
 
     write_sidecar(
-        {"dataset": dataset, "models": list(models), "results_dir": str(results_dir)},
+        {
+            "dataset": dataset,
+            "models": list(models),
+            "results_dir": str(results_dir),
+            "accepted_only": accepted_only,
+            "accepted_ids_count": len(accepted_ids) if accepted_ids is not None else None,
+        },
         dataset_out_dir / "provenance.json",
     )
     click.echo(f"Wrote outputs to {dataset_out_dir}")
@@ -874,6 +916,17 @@ def process_dataset(
     show_default=True,
     help="RNG seed for the bootstrap resampling, for reproducibility.",
 )
+@click.option(
+    "--accepted-only",
+    is_flag=True,
+    default=False,
+    help=(
+        "Restrict to ids with accepted_pair=True in "
+        "datasets_out/{dataset}/meaning_accept.csv (RQ1 §5 step 7). Writes to "
+        "a separate '{dataset}_accepted' output folder so the original, "
+        "unfiltered headline outputs are never overwritten."
+    ),
+)
 def main(
     datasets: tuple[str, ...],
     models: tuple[str, ...],
@@ -883,6 +936,7 @@ def main(
     force: bool,
     n_boot: int,
     boot_seed: int,
+    accepted_only: bool,
 ) -> None:
     """Write per-variant confusion tables, colored figures, and McNemar reports for each dataset."""
     for dataset in datasets:
@@ -895,6 +949,7 @@ def main(
             force=force,
             n_boot=n_boot,
             boot_seed=boot_seed,
+            accepted_only=accepted_only,
         )
 
 

@@ -228,11 +228,15 @@ __marimo__/
 
 # Local-only files
 local/
+paper_preparations/
 
 # Pipeline outputs (Stage 1/2 CSVs, Stage 3 result JSONs, analysis artifacts)
 datasets_out/
 analysis/figures/
 analysis/tables/
+
+# RQ2 external psycholinguistic/corpus norm data (user-sourced, not ours to redistribute)
+data/norms/_files/
 
 # HF caches (may be redirected here via HF_HOME)
 .hf_cache/

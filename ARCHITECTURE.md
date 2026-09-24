@@ -65,7 +65,7 @@ Key points:
 
 **Responsibilities**
 
-- Load raw datasets from Hugging Face (`sst2`, `mmlu`, `mnli`).
+- Load raw datasets from Hugging Face (`sst2`, `mmlu`, `mnli`, `mnli_hypothesis`).
 - Normalize into a shared in-memory schema (`DatasetRow` = `id`, `x`, `y`,
   `meta`).
 - For sentence-pair tasks, put the rewritten side in `x` and the fixed side in
@@ -74,9 +74,17 @@ Key points:
   prompt only through `augmentation/prompts/loader.py:render_context`, which is
   allowlist-based — anything not named there (e.g. MMLU `answer_index`, MNLI
   `prompt_id`/`genre`) can never leak into a prompt.
+  - `mnli_hypothesis` (RQ3 §4 position variation, `data/mnli.py`) selects the
+    exact same pairs/ids as `mnli` (shared `_iter_selected_pairs` helper) but
+    swaps the roles: `x` = hypothesis (now the field Stage 2 rewrites),
+    `meta["premise"]` = the fixed premise. `render_context` renders a `premise`
+    block symmetric to its `hypothesis` block, and
+    `eval/mnli.py::MnliHypothesisEvaluator` reads `premise=ex.meta["premise"],
+    hypothesis=ex.x` (inverted from `MnliEvaluator`).
 - Provide deterministic loading and caching.
 - Expose each dataset through a **registry** so new datasets can be added
   without touching any other module.
+
 
 This module is a thin wrapper around HF `datasets`; it performs no filtering
 or cleaning — that belongs to Stage 1 (`cleaning/`). All datasets are loaded
@@ -460,6 +468,91 @@ One thin CLI wrapper per pipeline stage, plus analysis:
 Unit tests for: dataset loader shape, cleaning filters and length-band edges,
 augmenter prompt hashing / cache, validator thresholds, metric functions on
 toy data, config parsing, and Stage 3 triple-join correctness.
+
+### 2.11 RQ1 meaning-preservation pipeline (thesis Ch. 2, `paper_preparations/RQ1_meaning_preservation.md`)
+
+Post-Stage-3 validation chapter: an independent two-judge cross-check that
+the paraphrase/idiomatic rewrites still preserve the original's meaning,
+plus a re-fit of the Ch. 1 headline restricted to the validated subset.
+Pre-registration frozen at `paper_preparations/RQ1_preregistration.md`.
+
+- **`analysis/meaning_preservation.py`** — orchestrator. Runs one or more
+  configured LLM judges (`configs/validate/{dataset}.yaml`) over every
+  aligned (row, arm) pair, with per-pair-per-judge caching
+  (`augmentation/cache.py` reuse), a streaming/resumable partial CSV, and
+  retry-then-skip on transient errors. Also provides the downstream
+  merge step:
+  - `compute_accept_rule(verdicts_path)` — pivots the long-format
+    `meaning_validated(.partial).csv` into one row per id with an
+    `accepted_pair` flag (`True` iff every judge marked `preserved=True`
+    on both the `par` and `idi` arms); writes `meaning_accept.csv`.
+  - `judge_agreement_kappa(verdicts_path)` — Cohen's κ between the two
+    judges on the pair-judgment task (H1d), via `analysis/stats.cohen_kappa`.
+  - `stratify_audit_sample(...)` — draws the 200/200/100
+    both-accept/disagree/both-reject stratified human-audit sample (H1e).
+- **`analysis/mixed_effects.py`** — `fit_arm_effect(df)`: statsmodels
+  `MixedLM` wrapper fitting `is_correct ~ arm + (1|row_id) + (1|model_id)`
+  per dataset, for the RQ1 re-analysis (and reused as-is by RQ2).
+- **`scripts/validate_meaning.py`** (`idiom-validate`) — runs the judge
+  pass for one dataset config; `--max-pairs` caps new API calls per
+  invocation (a dry-run safety net), `--finalize` writes the canonical
+  `meaning_validated.csv` once a run completes without hitting the cap.
+- **`scripts/accept_rule.py`** (`idiom-accept-rule`) — CLI over
+  `compute_accept_rule` + `judge_agreement_kappa`; safe to run against an
+  in-progress `.partial.csv`.
+- **`scripts/audit_sample.py`** (`idiom-audit-sample`) — CLI over
+  `stratify_audit_sample`; writes `audit_sample.csv`.
+- **`scripts/variant_confusion.py`** gained an `--accepted-only` flag: when
+  set, restricts the existing McNemar + bootstrap engine to ids with
+  `accepted_pair=True` in `datasets_out/{dataset}/meaning_accept.csv`
+  (RQ1 plan §5 step 7), writing to a separate `{dataset}_accepted` output
+  folder so the original, unfiltered headline outputs are never touched.
+- **`scripts/analyze.py`** (`idiom-analyze`) gained the same `--accepted-only`
+  flag: restricts `analysis.aggregate.aggregate()` to each dataset's
+  accepted ids (looked up once per dataset from `meaning_accept.csv` and
+  cached), writing to `summary_accepted.{csv,md,meta.json}` instead of the
+  unfiltered `summary.*`. The shared plumbing —
+  `analysis.results.load_accepted_ids` / `filter_to_accepted` — is reused
+  by both this CLI and `variant_confusion.py`.
+
+### 2.12 RQ3 position variation, MNLI hypothesis arm (thesis Ch. 4, `paper_preparations/RQ3_position_variation.md`)
+
+Tests whether idiom-position within a sentence-pair task changes the effect,
+by rewriting the *other* half of the pair from the Ch. 1 MNLI run. Reuses the
+whole pipeline unchanged (Stage 2's `AugmentPipeline` only ever rewrites `x`
+— no new augmenter/pipeline code needed); the entire feature is a new dataset
+identity plus a matching small evaluator override:
+
+- **`data/mnli.py::MnliHypothesisLoader`** (`"mnli_hypothesis"`) — selects the
+  exact same pairs/ids as `MnliLoader` (shared `_iter_selected_pairs`
+  helper), but assigns `x` = hypothesis and `meta["premise"]` = the fixed
+  premise (roles swapped relative to `MnliLoader`).
+- **`augmentation/prompts/loader.py::render_context`** gained a `premise`
+  section (mirroring the existing `hypothesis` one) so the fixed premise
+  reaches the augmenter/judge prompts read-only.
+- **`augmentation/prompts/{paraphrase,idiomatic}_nli_hypothesis_v1.txt`** —
+  new prompt pair mirroring the `*_nli_v1.txt` premise-rewrite prompts, with
+  premise/hypothesis roles swapped in the wording.
+- **`eval/mnli.py::MnliHypothesisEvaluator`** (`"mnli_hypothesis"`) —
+  subclasses `MnliEvaluator`, overriding only `format()` to read
+  `premise=ex.meta["premise"], hypothesis=ex.x` (inverted). Parsing/labels
+  are inherited unchanged.
+- **`configs/clean/mnli_hypothesis.yaml`** — mirrors `configs/clean/mnli.yaml`
+  except `length: {min_tokens: 5, max_tokens: 60}` (hypotheses run shorter
+  than premises).
+- **`configs/augment/mnli_hypothesis.yaml`** / **`configs/validate/mnli_hypothesis.yaml`**
+  — otherwise identical to the `mnli` configs (same augmenter/model/judges),
+  just pointed at the new dataset name and prompt files.
+- `eval/registry.py::register_evaluator` was made generic
+  (`Callable[[type[_E]], type[_E]]` instead of
+  `Callable[[type[BaseEvaluator]], type[BaseEvaluator]]`) so that a decorated
+  evaluator subclassing another decorated evaluator (as
+  `MnliHypothesisEvaluator(MnliEvaluator)` does) keeps its own members
+  visible to static analysis instead of being widened to
+  `type[BaseEvaluator]`.
+
+As of this writing, no real augmentation/API calls have been run for
+`mnli_hypothesis` — only code + configs + unit tests (no network).
 
 ## 3. Data Contract
 

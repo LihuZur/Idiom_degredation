@@ -5,7 +5,7 @@ from typing import Any
 from augmentation.base import AugmentedRow
 from eval.config import EvalConfig
 from eval.mmlu import MmluEvaluator
-from eval.mnli import MnliEvaluator
+from eval.mnli import MnliEvaluator, MnliHypothesisEvaluator
 from eval.sst2 import Sst2Evaluator
 
 
@@ -124,6 +124,35 @@ def test_mnli_format_includes_premise_and_hypothesis() -> None:
 
     assert "The new rights are nice enough" in user
     assert "Everyone really likes the newest benefits" in user
+
+
+def test_mnli_hypothesis_format_swaps_premise_and_hypothesis_sides() -> None:
+    """RQ3 §4: `ex.x` is the hypothesis; the fixed premise lives in `ex.meta`."""
+    cfg = EvalConfig(model="dummy-model")
+    evaluator = MnliHypothesisEvaluator(cfg=cfg)
+    ex = make_dummy_ex(
+        x="Everyone really likes the newest benefits",
+        y=1,
+        meta={"premise": "The new rights are nice enough"},
+    )
+
+    formatted = evaluator.format(ex)
+    user = formatted.meta["messages"][1]["content"]
+
+    assert "Premise: The new rights are nice enough" in user
+    assert "Hypothesis: Everyone really likes the newest benefits" in user
+
+
+def test_mnli_hypothesis_parser_matches_mnli_parser() -> None:
+    """Parsing is inherited unchanged from `MnliEvaluator` (only `format()` differs)."""
+    cfg = EvalConfig(model="dummy-model")
+    evaluator = MnliHypothesisEvaluator(cfg=cfg)
+    ex = make_dummy_ex()
+
+    assert evaluator.parse("entailment", ex) == ("0", "ok")
+    assert evaluator.parse(" NEUTRAL.\n", ex) == ("1", "ok")
+    assert evaluator.parse("The answer is contradiction.", ex) == ("2", "ok")
+    assert evaluator.parse("unknown output", ex) == (None, "unparseable")
 
 
 def test_score() -> None:

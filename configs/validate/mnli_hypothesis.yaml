@@ -1,0 +1,34 @@
+# RQ3 meaning-preservation judge pass — MNLI hypothesis-rewrite variant.
+# Mirrors configs/validate/mnli.yaml exactly (same judges/decoding/retry) —
+# only `dataset` differs. See paper_preparations/RQ3_position_variation.md §5.6.
+
+dataset: mnli_hypothesis
+
+prompt_file: meaning_preservation_v1.txt
+
+judges:
+  - provider: openai
+    model: gpt-5.6-sol
+    # Entire gpt-5.6 family is reasoning-locked to temperature=1 (vendor-side).
+    temperature: 1.0
+  - provider: anthropic
+    model: claude-sonnet-4-5
+
+decoding:
+  # Global default; used by Claude (fully deterministic). OpenAI overrides
+  # via judges[].temperature above since gpt-5.6-* rejects anything but 1.0.
+  temperature: 0.0
+  max_output_tokens: 128
+
+retry:
+  max_attempts: 3
+  backoff_seconds: 2.0
+
+cache:
+  enabled: true
+  dir: .hf_cache/validate
+
+limits:
+  max_pairs: null
+
+output_dir: datasets_out

@@ -64,3 +64,32 @@ class MnliEvaluator(BaseEvaluator):
         if earliest_label is None:
             return None, "unparseable"
         return earliest_label, "ok"
+
+
+@register_evaluator("mnli_hypothesis")
+class MnliHypothesisEvaluator(MnliEvaluator):
+    """RQ3 §4 position-variation variant: `data/mnli.py::MnliHypothesisLoader`
+    rewrites the hypothesis instead of the premise, so `ex.x` holds the
+    hypothesis and the fixed premise lives in `ex.meta["premise"]` — the
+    reverse of `MnliEvaluator`. Everything else (system prompt, label parsing)
+    is identical, so this only overrides `format()`.
+    """
+
+    dataset = "mnli_hypothesis"
+
+    def format(self, ex: AugmentedRow) -> FormattedInput:
+        messages = [
+            {"role": "system", "content": mnli_prompts.SYSTEM},
+            {
+                "role": "user",
+                "content": mnli_prompts.USER_TEMPLATE.format(
+                    premise=ex.meta["premise"],
+                    hypothesis=ex.x,
+                ),
+            },
+        ]
+        return FormattedInput(
+            id=ex.id,
+            prompt="",
+            meta={"messages": messages, "generate_kwargs": self._gen_kwargs},
+        )

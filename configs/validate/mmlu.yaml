@@ -1,0 +1,40 @@
+# RQ1 meaning-preservation judge pass — MMLU (smallest dataset; live-fire first).
+# See paper_preparations/RQ1_meaning_preservation.md §5.
+
+dataset: mmlu
+
+prompt_file: meaning_preservation_v1.txt
+
+# Two-judge cross-family design. Both non-Gemini (Gemini is the augmenter;
+# self-preference bias 8-15pp per MT-Bench / RewardBench / EMNLP 2026).
+judges:
+  - provider: openai
+    model: gpt-5.6-sol
+    # Entire gpt-5.6 family is reasoning-locked to temperature=1 (vendor-side).
+    temperature: 1.0
+  - provider: anthropic
+    model: claude-sonnet-4-5
+
+decoding:
+  # Global default; used by Claude (fully deterministic). OpenAI overrides
+  # via judges[].temperature above since gpt-5.6-* rejects anything but 1.0.
+  temperature: 0.0
+  # 128 was too small for gpt-5.6-sol (reasoning-tier): invisible reasoning
+  # tokens were consuming the whole budget, leaving no visible answer text
+  # (EmptyResponseError skips on ~6% of pairs). Bumped to give it headroom.
+  max_output_tokens: 512
+
+retry:
+  max_attempts: 3
+  backoff_seconds: 2.0
+
+cache:
+  enabled: true
+  dir: .hf_cache/validate
+
+# Safety cap for the live-fire dry run — set to a small integer to bound spend.
+# Set to `null` (or omit) for the full-corpus pass.
+limits:
+  max_pairs: null
+
+output_dir: datasets_out

@@ -1,0 +1,28 @@
+# RQ2 idiom-extraction pass — MMLU.
+# See paper_preparations/RQ2_idiom_properties.md §5.
+
+dataset: mmlu
+
+prompt_file: idiom_extraction_v1.txt
+
+extractor:
+  provider: openai
+  model: gpt-5.6-luna
+  temperature: 1.0  # gpt-5.6-luna rejects any value but the default (1.0)
+
+decoding:
+  temperature: 0.0
+  max_output_tokens: 1024
+
+retry:
+  max_attempts: 5
+  backoff_seconds: 2.0
+
+cache:
+  enabled: true
+  dir: .hf_cache/annotate
+
+limits:
+  max_rows: null
+
+output_dir: datasets_out

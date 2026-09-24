@@ -28,6 +28,8 @@ dependencies = [
     "anthropic>=0.40",
     "google-genai>=1.0",
     "openai>=1.50",
+    "statsmodels>=0.14",
+    "openpyxl>=3.1.5",
 ]
 
 # Console entrypoints so each Stage CLI is runnable as `uv run <name>` instead
@@ -37,6 +39,11 @@ idiom-clean = "scripts.clean:main"
 idiom-augment = "scripts.augment:main"
 idiom-eval = "scripts.eval:main"
 idiom-analyze = "scripts.analyze:main"
+idiom-validate = "scripts.validate_meaning:main"
+idiom-annotate-idioms = "scripts.annotate_idioms:main"
+idiom-accept-rule = "scripts.accept_rule:main"
+idiom-audit-sample = "scripts.audit_sample:main"
+idiom-audit-score = "scripts.audit_score:main"
 idiom-plot-dataset = "scripts.plot_dataset:main"
 idiom-plot-summary = "scripts.plot_summary:main"
 idiom-variant-confusion = "scripts.variant_confusion:main"
@@ -45,6 +52,10 @@ idiom-arm-overlap = "scripts.arm_overlap:main"
 idiom-report-tables = "scripts.gen_report_tables:main"
 idiom-scale-trend = "scripts.scale_trend:main"
 idiom-test-agreement = "scripts.test_agreement:main"
+idiom-mixed-effects = "scripts.mixed_effects:main"
+idiom-rate-opacity = "scripts.rate_opacity:main"
+idiom-arm-effect = "scripts.arm_effect:main"
+idiom-robustness = "scripts.robustness_check:main"
 
 [dependency-groups]
 dev = [

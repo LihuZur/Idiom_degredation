@@ -5,7 +5,7 @@ from typing import Any
 import pytest
 
 import data.mnli as mnli_module
-from data.mnli import MnliLoader
+from data.mnli import MnliHypothesisLoader, MnliLoader
 
 _HF_REVISION = "da70db2af9d09693783c3320c4249840212ee221"
 
@@ -200,3 +200,39 @@ def test_mnli_loader_meta_carries_no_unexpected_keys(stub_hf: list[tuple[str, st
     del stub_hf
     for row in _load():
         assert set(row.meta) == {"hypothesis", "label_name", "prompt_id", "genre"}
+
+
+def _load_hypothesis() -> list[Any]:
+    loader = MnliHypothesisLoader(
+        hf_revision=_HF_REVISION, normalize=["nfc", "collapse_whitespace"]
+    )
+    return list(loader.load())
+
+
+def test_mnli_hypothesis_loader_selects_the_same_pairs_as_mnli_loader(
+    stub_hf: list[tuple[str, str]],
+) -> None:
+    """RQ3 §3: same row ids as `mnli` so the two are directly comparable."""
+    del stub_hf
+    assert [row.id for row in _load_hypothesis()] == [row.id for row in _load()]
+
+
+def test_mnli_hypothesis_loader_swaps_x_and_meta_roles(stub_hf: list[tuple[str, str]]) -> None:
+    del stub_hf
+    first = _load_hypothesis()[0]
+
+    # x = hypothesis (the field Stage 2 rewrites); premise is now the fixed meta field.
+    assert first.x == "Everyone really likes the newest benefits"
+    assert first.y == 1
+    assert first.meta["premise"] == "The new rights are nice enough"
+    assert first.meta["label_name"] == "neutral"
+    assert first.meta["genre"] == "slate"
+    assert "hypothesis" not in first.meta
+
+
+def test_mnli_hypothesis_loader_meta_carries_no_unexpected_keys(
+    stub_hf: list[tuple[str, str]],
+) -> None:
+    del stub_hf
+    for row in _load_hypothesis():
+        assert set(row.meta) == {"premise", "label_name", "prompt_id", "genre"}

@@ -6,6 +6,7 @@ than printing stale numbers if the underlying results change.
 
 import json
 from pathlib import Path
+from typing import cast
 
 import click
 import numpy as np
@@ -87,8 +88,9 @@ def main(results: Path, summary: Path, per_model: bool) -> None:
     shipped = shipped[shipped.model_id.isin(DISPLAY)]
 
     for dataset in ("sst2", "mmlu", "mnli"):
+        shipped_ds = cast(pd.DataFrame, shipped[shipped.dataset == dataset])
         df = _per_model_naive(results, dataset).merge(
-            shipped[shipped.dataset == dataset], left_on="model", right_on="model_id"
+            shipped_ds, left_on="model", right_on="model_id"
         )
         # Recomputed accuracies must match the shipped summary, and the naive gap must
         # equal the two reported deltas chained together (analysis/stats.py).
@@ -107,9 +109,11 @@ def main(results: Path, summary: Path, per_model: bool) -> None:
             f"  positive-signed: {int((df.naive > 0).sum())}/{len(df)}"
         )
         if per_model and dataset == "sst2":
-            table = df[["model", "naive", "naive_p"]].assign(
-                naive=lambda x: (x.naive * 100).round(2)
-            )
+
+            def _to_pp(x: pd.DataFrame) -> pd.Series:
+                return (x.naive * 100).round(2)
+
+            table = df[["model", "naive", "naive_p"]].assign(naive=_to_pp)
             click.echo(table.to_string(index=False))
 
 

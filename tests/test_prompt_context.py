@@ -77,6 +77,28 @@ def test_render_context_ignores_empty_or_non_string_hypothesis() -> None:
     assert render_context({"label_name": ""}) == ""
 
 
+def test_render_context_renders_premise_and_label_name_for_mnli_hypothesis() -> None:
+    """RQ3 §4: mnli_hypothesis fixes the premise instead of the hypothesis."""
+    ctx = render_context(
+        {
+            "premise": "The new rights are nice enough",
+            "label_name": "neutral",
+            "prompt_id": 63735,
+            "genre": "slate",
+        }
+    )
+    assert "The new rights are nice enough" in ctx
+    assert "Premise (fixed reference" in ctx
+    assert "must not restate" in ctx
+    assert "Gold label in words: neutral" in ctx
+    assert ctx.endswith("\n\n")
+
+
+def test_render_context_ignores_empty_or_non_string_premise() -> None:
+    assert render_context({"premise": ""}) == ""
+    assert render_context({"premise": None}) == ""
+
+
 def test_templates_have_context_and_text_slots() -> None:
     for name in ("paraphrase_v1.txt", "idiomatic_v1.txt"):
         template = load_prompt(name)
@@ -135,6 +157,40 @@ def test_nli_template_fills_cleanly_for_mnli() -> None:
             ),
         )
         assert "Everyone really likes the newest benefits" in rendered
+        assert "Gold label in words: neutral" in rendered
+
+
+def test_nli_hypothesis_templates_have_context_and_text_slots() -> None:
+    for name in ("paraphrase_nli_hypothesis_v1.txt", "idiomatic_nli_hypothesis_v1.txt"):
+        template = load_prompt(name)
+        assert "{context}" in template
+        assert "{x}" in template
+        assert "{y}" in template
+
+
+def test_nli_hypothesis_templates_forbid_encoding_the_answer() -> None:
+    for name in ("paraphrase_nli_hypothesis_v1.txt", "idiomatic_nli_hypothesis_v1.txt"):
+        template = load_prompt(name)
+        assert "restate" in template
+        assert "hint at the label" in template
+
+
+def test_nli_hypothesis_template_fills_cleanly_for_mnli_hypothesis() -> None:
+    for name in ("paraphrase_nli_hypothesis_v1.txt", "idiomatic_nli_hypothesis_v1.txt"):
+        template = load_prompt(name)
+        rendered = template.format(
+            x="Everyone really likes the newest benefits",
+            y="1",
+            context=render_context(
+                {
+                    "premise": "The new rights are nice enough",
+                    "label_name": "neutral",
+                    "prompt_id": 63735,
+                    "genre": "slate",
+                }
+            ),
+        )
+        assert "The new rights are nice enough" in rendered
         assert "Gold label in words: neutral" in rendered
         assert "The new rights are nice enough" in rendered
         assert "Answer choices:" not in rendered

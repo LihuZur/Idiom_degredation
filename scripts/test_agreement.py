@@ -7,6 +7,7 @@ the stored bootstrap p, so the report can state how often the two verdicts
 actually differ rather than only what the rule would do if they did.
 """
 
+from collections.abc import Iterator
 from pathlib import Path
 
 import click
@@ -27,7 +28,7 @@ def _mcnemar_cc_p(b: int, c: int) -> float:
     return float(chi2.sf(stat, 1))
 
 
-def _runs(root: Path, dataset: str):
+def _runs(root: Path, dataset: str) -> Iterator[tuple[str, int, int, float, float]]:
     """Yield (model_id, b, c, mcnemar_p, bootstrap_p) for each model in the panel."""
     tables = root / dataset / "tables"
     for model_id in DISPLAY:
