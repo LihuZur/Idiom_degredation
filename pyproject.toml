@@ -56,6 +56,7 @@ idiom-mixed-effects = "scripts.mixed_effects:main"
 idiom-rate-opacity = "scripts.rate_opacity:main"
 idiom-arm-effect = "scripts.arm_effect:main"
 idiom-robustness = "scripts.robustness_check:main"
+idiom-raw-accuracy = "scripts.raw_accuracy:main"
 
 [dependency-groups]
 dev = [
