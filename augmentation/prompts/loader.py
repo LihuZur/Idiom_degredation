@@ -28,6 +28,13 @@ _PREMISE_BLOCK = (
     "{premise}"
 )
 
+_QUESTION_BLOCK = (
+    "Question (fixed reference — it is never rewritten; the rewritten answer\n"
+    "choices must still answer it in exactly the same way as the original\n"
+    "choices, with the correct choice still uniquely correct):\n"
+    "{question}"
+)
+
 
 def render_context(meta: dict[str, Any]) -> str:
     """Render read-only reference context for an augmenter prompt's `{context}` slot.
@@ -45,6 +52,10 @@ def render_context(meta: dict[str, Any]) -> str:
     - `premise` — the fixed half of a sentence-pair item when the *hypothesis* is
       the field being rewritten instead (RQ3 §4 position variation). Mutually
       exclusive with `hypothesis` in practice (a loader emits one or the other).
+    - `question` — the fixed question stem when the *answer choices* are the
+      field being rewritten instead (RQ3 §4 position variation,
+      `data/mmlu.py::MmluChoicesLoader`). Mutually exclusive with `choices` in
+      practice (a loader emits one or the other).
     - `label_name` — the gold label in words, for datasets whose `y` is an opaque
       integer code.
 
@@ -73,6 +84,10 @@ def render_context(meta: dict[str, Any]) -> str:
     premise = meta.get("premise")
     if isinstance(premise, str) and premise:
         sections.append(_PREMISE_BLOCK.format(premise=premise))
+
+    question = meta.get("question")
+    if isinstance(question, str) and question:
+        sections.append(_QUESTION_BLOCK.format(question=question))
 
     label_name = meta.get("label_name")
     if isinstance(label_name, str) and label_name:

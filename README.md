@@ -252,6 +252,12 @@ is re-runnable independently of the earlier stages.
 
 ## 7. Phases & Milestones
 
+> **Thesis phase (2026-10-17):** the active research plan is
+> `paper_preparations/THESIS_PLAN_v2.md` (local, gitignored); execution status is
+> in `local/RQ_STATUS.md`. Planned code changes: AG News dataset, a 4th
+> `span_literal` variant, controlled single-idiom generation with recorded
+> metadata, calibrated single judge + repair loop.
+
 | Phase | Goal | Key outputs |
 |-------|------|-------------|
 | 0. Setup | Repo scaffolding, env, config schema, dataset loaders | `data/`, `configs/`, dev env |

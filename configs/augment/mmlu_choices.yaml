@@ -1,0 +1,44 @@
+# Stage 2 (augmentation) config for the RQ3 mmlu_choices position-variation
+# variant. Mirrors configs/augment/mmlu.yaml exactly (same augmenter, model,
+# decoding, retry, validators) — only the prompts differ, pointing at the
+# choices-rewrite templates instead of the question-stem ones.
+
+dataset: mmlu_choices
+seed: 0
+
+augmenter: gemini
+# Same choice as configs/augment/mmlu.yaml, for cost/speed consistency with Ch. 1.
+augmenter_model: gemini-3.6-flash
+
+decoding:
+  temperature: 0.7
+  max_output_tokens: 1536
+
+judge:
+  temperature: 0.0
+  max_output_tokens: 512
+
+retry:
+  max_attempts: 3
+  backoff_seconds: 2.0
+
+# RQ3 §5.1: choices-rewrite templates (question is now the fixed reference,
+# rendered via augmentation/prompts/loader.py's `{context}` question block).
+prompts:
+  paraphrase: paraphrase_mmlu_choices_v1.txt
+  idiomatic:  idiomatic_mmlu_choices_v1.txt
+
+validators:
+  semantic_similarity:
+    embedding_model: null
+    min_cosine: 0.80
+  label_preservation:
+    method: llm_judge
+  idiom_presence:
+    method: llm_judge
+  idiom_absence:
+    method: llm_judge
+
+cache:
+  enabled: true
+  dir: .hf_cache/augment

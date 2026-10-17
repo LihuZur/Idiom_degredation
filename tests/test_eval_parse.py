@@ -4,7 +4,7 @@ from typing import Any
 
 from augmentation.base import AugmentedRow
 from eval.config import EvalConfig
-from eval.mmlu import MmluEvaluator
+from eval.mmlu import MmluChoicesEvaluator, MmluEvaluator
 from eval.mnli import MnliEvaluator, MnliHypothesisEvaluator
 from eval.sst2 import Sst2Evaluator
 
@@ -79,6 +79,37 @@ def test_mmlu_parser() -> None:
     # falls back to first-occurrence-in-full-text (unreliable, but no registered model
     # emits a <think> block, so this case does not arise in a real run)
     assert evaluator.parse("<think>Option A is discussed here", ex) == ("0", "ok")
+
+
+def test_mmlu_choices_format_swaps_choices_and_question_sides() -> None:
+    """RQ3 §4: `ex.x` is the encoded choices; the fixed question lives in `ex.meta`."""
+    cfg = EvalConfig(model="dummy-model")
+    evaluator = MmluChoicesEvaluator(cfg=cfg)
+    ex = make_dummy_ex(
+        x="A) Mercury\nB) Venus\nC) Earth\nD) Mars",
+        y=0,
+        meta={"question": "Which planet is closest to the sun?"},
+    )
+
+    formatted = evaluator.format(ex)
+    user = formatted.meta["messages"][1]["content"]
+
+    assert "Question: Which planet is closest to the sun?" in user
+    assert "A. Mercury" in user
+    assert "B. Venus" in user
+    assert "C. Earth" in user
+    assert "D. Mars" in user
+
+
+def test_mmlu_choices_parser_matches_mmlu_parser() -> None:
+    """Parsing is inherited unchanged from `MmluEvaluator` (only `format()` differs)."""
+    cfg = EvalConfig(model="dummy-model")
+    evaluator = MmluChoicesEvaluator(cfg=cfg)
+    ex = make_dummy_ex()
+
+    assert evaluator.parse("A", ex) == ("0", "ok")
+    assert evaluator.parse("The correct choice is D.", ex) == ("3", "ok")
+    assert evaluator.parse("unknown output", ex) == (None, "unparseable")
 
 
 def test_mnli_parser() -> None:

@@ -1,0 +1,34 @@
+You are rewriting the answer choices of a multiple-choice question for a
+research dataset on idiomatic language and model robustness.
+
+Task: reword each of the four answer choices in the "Answer choices to
+rewrite" section into a neutral paraphrase that expresses the same meaning
+using plain, literal language. Do NOT use any idioms, figures of speech, or
+figurative expressions in any choice — every phrase must be interpretable
+literally.
+
+Hard requirements:
+- Preserve the original meaning of every choice exactly.
+- Preserve the original label: {y} (the correct choice's 0-indexed position,
+  A=0, B=1, C=2, D=3). It must still be at the same letter after rewriting,
+  and must still be the uniquely correct answer to the question below.
+- The question shown below is fixed and is never rewritten. Every rewritten
+  choice must still be a candidate answer to it in exactly the same way as
+  the corresponding original choice.
+- Do NOT hint at which choice is correct through phrasing, emphasis, hedging,
+  or extra confidence — every choice must read as equally plausible, exactly
+  as in the original.
+- Do not add, remove, or change any facts, entities, or numbers, and do not
+  merge, drop, or reorder choices.
+- Keep each rewritten choice roughly the same length and register as its
+  corresponding original choice.
+- Output exactly four lines, one rewritten choice per line, in this format
+  and no other, with no preamble, blank lines, quotation marks, or
+  explanation:
+A) <rewritten choice A>
+B) <rewritten choice B>
+C) <rewritten choice C>
+D) <rewritten choice D>
+
+{context}Answer choices to rewrite:
+{x}

@@ -42,9 +42,16 @@ _REPORTED_MODELS = frozenset(
 
 
 def test_dataset_registry_has_sst2_mmlu_and_mnli() -> None:
-    # `mnli_hypothesis` (RQ3 §4 position variation) rewrites the hypothesis
-    # instead of the premise; see `data/mnli.py::MnliHypothesisLoader`.
-    assert set(data_reg.list_datasets()) == {"sst2", "mmlu", "mnli", "mnli_hypothesis"}
+    # `mnli_hypothesis`/`mmlu_choices` (RQ3 §4 position variation) rewrite the
+    # hypothesis/choices instead of the premise/question stem; see
+    # `data/mnli.py::MnliHypothesisLoader` and `data/mmlu.py::MmluChoicesLoader`.
+    assert set(data_reg.list_datasets()) == {
+        "sst2",
+        "mmlu",
+        "mnli",
+        "mnli_hypothesis",
+        "mmlu_choices",
+    }
     models = model_reg.list_models()
     assert models == sorted(models), "list_models() must return sorted ids"
     assert len(models) == len(set(models)), "duplicate model ids registered"

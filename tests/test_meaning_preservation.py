@@ -214,6 +214,36 @@ def test_render_prompt_renders_mmlu_choices_with_answer_index() -> None:
     assert "correct choice remains index 0" in rendered
 
 
+def test_render_prompt_renders_mnli_hypothesis_premise() -> None:
+    """RQ3 §4: mnli_hypothesis fixes the premise instead of the hypothesis."""
+    template = load_prompt("meaning_preservation_v1.txt")
+    pair = PairInput(
+        row_id="mnli_hypothesis/0",
+        arm="idi",
+        original_text="hypothesis",
+        rewrite_text="rewritten hypothesis",
+        meta={"premise": "This is the fixed premise."},
+    )
+    rendered = render_prompt(template, pair)
+    assert "This is the fixed premise." in rendered
+    assert "CONTEXT" in rendered
+
+
+def test_render_prompt_renders_mmlu_choices_question() -> None:
+    """RQ3 §4: mmlu_choices fixes the question stem instead of the choices."""
+    template = load_prompt("meaning_preservation_v1.txt")
+    pair = PairInput(
+        row_id="mmlu_choices/0",
+        arm="idi",
+        original_text="A) Mercury\nB) Venus\nC) Earth\nD) Mars",
+        rewrite_text="A) The first rock from the sun\nB) Venus\nC) Earth\nD) Mars",
+        meta={"question": "Which planet is closest to the sun?"},
+    )
+    rendered = render_prompt(template, pair)
+    assert "Which planet is closest to the sun?" in rendered
+    assert "correct choice still uniquely correct" in rendered
+
+
 # ---------- input loading ----------
 
 

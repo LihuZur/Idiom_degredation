@@ -99,6 +99,19 @@ def test_render_context_ignores_empty_or_non_string_premise() -> None:
     assert render_context({"premise": None}) == ""
 
 
+def test_render_context_renders_question_for_mmlu_choices() -> None:
+    """RQ3 §4: mmlu_choices fixes the question stem instead of the choices."""
+    ctx = render_context({"question": "Which planet is closest to the sun?"})
+    assert "Which planet is closest to the sun?" in ctx
+    assert "Question (fixed reference" in ctx
+    assert ctx.endswith("\n\n")
+
+
+def test_render_context_ignores_empty_or_non_string_question() -> None:
+    assert render_context({"question": ""}) == ""
+    assert render_context({"question": None}) == ""
+
+
 def test_templates_have_context_and_text_slots() -> None:
     for name in ("paraphrase_v1.txt", "idiomatic_v1.txt"):
         template = load_prompt(name)

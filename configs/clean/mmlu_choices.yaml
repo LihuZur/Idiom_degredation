@@ -1,0 +1,32 @@
+dataset: mmlu_choices
+seed: 0
+
+hf_revision: c30699e8356da336a370243923dbaf21066bb9fe
+
+# RQ3 §4: the length band applies to the *encoded choices block*
+# (`data/mmlu.py::encode_choices`: 4 lines, "A) ..." through "D) ..."), not to
+# the question stem — so this is deliberately a different band than
+# configs/clean/mmlu.yaml's 10-100 (which bounds the stem). Four short MMLU
+# choices plus their letter prefixes can be well under 10 tokens combined
+# (e.g. single-word/numeric options), and some subjects (e.g.
+# professional_law) have long, paragraph-like choices that can run well past
+# 100 combined — widened at both ends accordingly (author's call, 2026-09-27
+# — see paper_preparations/RQ3_position_variation.md §8, "MMLU choice length
+# skew").
+length:
+  min_tokens: 8
+  max_tokens: 400
+
+# Mirrors configs/clean/mmlu.yaml's cap — same cost-control rationale.
+max_rows: 2000
+
+normalize:
+  - nfc
+  - collapse_whitespace
+
+# `data/mmlu.py::MmluChoicesLoader` shares `_iter_mmlu_rows` with `MmluLoader`
+# so both select the same underlying items under the same ids; the length
+# filter above then acts on a different field, so the post-filter row count
+# and shuffle/cap outcome will generally differ from plain `mmlu` — same
+# caveat as `mnli`/`mnli_hypothesis` (see configs/clean/mnli_hypothesis.yaml).
+dedupe: true

@@ -26,6 +26,14 @@ def render_context_block(meta: dict[str, Any]) -> str:
             f"{hypothesis}"
         )
 
+    premise = meta.get("premise")
+    if isinstance(premise, str) and premise.strip():
+        sections.append(
+            "CONTEXT (fixed premise — same for ORIGINAL and REWRITE; the "
+            "entailment relationship must be preserved):\n"
+            f"{premise}"
+        )
+
     choices = meta.get("choices")
     if isinstance(choices, list) and choices:
         rendered = "\n".join(f"  {i}. {c}" for i, c in enumerate(choices) if isinstance(c, str))
@@ -39,6 +47,15 @@ def render_context_block(meta: dict[str, Any]) -> str:
             sections.append(
                 f"CONTEXT (fixed answer choices — same for ORIGINAL and REWRITE):\n{rendered}"
             )
+
+    question = meta.get("question")
+    if isinstance(question, str) and question.strip():
+        sections.append(
+            "CONTEXT (fixed question — same for ORIGINAL and REWRITE; the "
+            "rewritten choices must still answer it the same way, with the "
+            "correct choice still uniquely correct):\n"
+            f"{question}"
+        )
 
     if not sections:
         return ""
