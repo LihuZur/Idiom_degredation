@@ -1,0 +1,17 @@
+dataset: mnli_wide
+seed: 0
+
+# Candidate pool for the v2 idiom generator: both validation halves (same ids as `mnli`) + 20,000 `train` premises (was 6,000; the old pool is a byte-identical subset).
+hf_revision: da70db2af9d09693783c3320c4249840212ee221
+
+length:
+  min_tokens: 10
+  max_tokens: 100
+
+max_rows: null
+
+normalize:
+  - nfc
+  - collapse_whitespace
+
+dedupe: true

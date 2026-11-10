@@ -158,6 +158,7 @@ def paired_bootstrap(
     n_resamples: int,
     ci: float,
     seed: int,
+    variants: tuple[str, str, str] = ("original", "paraphrase", "idiomatic"),
 ) -> BootstrapResult:
     """Run a paired percentile bootstrap over per-variant correctness flags.
 
@@ -174,10 +175,15 @@ def paired_bootstrap(
         n_resamples: Number of bootstrap resamples to draw.
         ci: Confidence level in (0, 1), e.g. `0.95`.
         seed: Seed for the `numpy.random.default_rng` used for resampling.
+        variants: The (baseline, control, treatment) variant names. Pilot data
+            uses the default (original, paraphrase, idiomatic); v2 data uses
+            (original, span_literal, idiomatic). `delta_paraphrase` always holds
+            control - baseline and `delta_idiom` treatment - control.
 
     Returns:
-        A `BootstrapResult` with per-variant accuracy estimates and the
-        paraphrase-vs-original and idiomatic-vs-paraphrase delta estimates.
+        A `BootstrapResult` with per-variant accuracy estimates (keyed by the
+        names in `variants`) and the control-vs-baseline and
+        treatment-vs-control delta estimates.
 
     Raises:
         ValueError: If the variant flag sequences have unequal lengths.
@@ -190,13 +196,16 @@ def paired_bootstrap(
         )
     n = next(iter(lengths))
 
+    base_name, control_name, treat_name = variants
     orig, para, idiom = (
-        np.asarray(correct_by_variant[variant], dtype=np.float64)
-        for variant in ("original", "paraphrase", "idiomatic")
+        np.asarray(correct_by_variant[variant], dtype=np.float64) for variant in variants
     )
     # Point estimates are plain-mean accuracies (independent of the resampling).
-    acc_point = {"original": float(orig.mean()), "paraphrase": float(para.mean())}
-    acc_point["idiomatic"] = float(idiom.mean())
+    acc_point = {
+        base_name: float(orig.mean()),
+        control_name: float(para.mean()),
+        treat_name: float(idiom.mean()),
+    }
 
     def _stat(
         a: NDArray[np.float64],
@@ -227,21 +236,21 @@ def paired_bootstrap(
     hi = np.asarray(interval.high, dtype=np.float64)
 
     acc = {
-        "original": Estimate(acc_point["original"], float(lo[0]), float(hi[0])),
-        "paraphrase": Estimate(acc_point["paraphrase"], float(lo[1]), float(hi[1])),
-        "idiomatic": Estimate(acc_point["idiomatic"], float(lo[2]), float(hi[2])),
+        base_name: Estimate(acc_point[base_name], float(lo[0]), float(hi[0])),
+        control_name: Estimate(acc_point[control_name], float(lo[1]), float(hi[1])),
+        treat_name: Estimate(acc_point[treat_name], float(lo[2]), float(hi[2])),
     }
     return BootstrapResult(
         n=n,
         acc=acc,
         delta_paraphrase=DeltaEstimate(
-            point=acc_point["paraphrase"] - acc_point["original"],
+            point=acc_point[control_name] - acc_point[base_name],
             ci_low=float(lo[3]),
             ci_high=float(hi[3]),
             p_value=mcnemar_exact_p(orig, para),
         ),
         delta_idiom=DeltaEstimate(
-            point=acc_point["idiomatic"] - acc_point["paraphrase"],
+            point=acc_point[treat_name] - acc_point[control_name],
             ci_low=float(lo[4]),
             ci_high=float(hi[4]),
             p_value=mcnemar_exact_p(para, idiom),

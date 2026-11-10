@@ -1,0 +1,19 @@
+dataset: agnews
+seed: 0
+
+# fancyzhx/ag_news (test split, 7,600 rows) pinned to this commit.
+hf_revision: eb185aade064a813bc0b7f42de02595523103ca4
+
+# Word-count band: the 5th-95th percentile of AG News is 23-53 words.
+length:
+  min_tokens: 20
+  max_tokens: 80
+
+max_rows: 2000
+
+normalize:
+  - nfc
+  - html_artifacts
+  - collapse_whitespace
+
+dedupe: true

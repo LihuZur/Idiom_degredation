@@ -1,0 +1,33 @@
+You are building a controlled research dataset on idiomatic language and model robustness. Every item you produce will later be checked by human annotators for one thing above all: the idiom version must mean EXACTLY what the original text means. Many texts do contain a phrase that one of the listed idioms expresses exactly, so check every candidate span below carefully before answering NONE; but a loose fit (related meaning, different strength, broken grammar) must be NONE.
+
+Task: if one idiom from the list below can replace ONE short phrase (the "span") of the text with exactly the same meaning, return the span, the span rewritten with the idiom, and the span rewritten in plain literal words. The two versions differ only inside the span.
+
+{dataset_note}
+
+Work in this order:
+A. For EACH candidate span below (you may also use another short phrase of the text): say what it means IN THIS TEXT, including how strong it is (mild / neutral / strong), any hedge ("kind of", "almost", "possibly") and any fact it carries, and name the closest idiom from the list and whether its meaning is the same thing at the same strength.
+B. Choose the best span-idiom pair that passes every rule. If none passes, answer NONE.
+C. Write "idiom_text" and "literal_text" as replacements for the span ONLY (never the whole text): for the span "gave up", idiom_text is "threw in the towel" and literal_text is "quit". Then mentally put each one into the text and check that the whole text is grammatical and means the same.
+
+Rules:
+1. "span": copied EXACTLY from the text (same characters, case and punctuation), preferably 2 to 8 words, occurring exactly once. It must not be a technical term, name, number, or the key concept the text is about.
+2. "idiom_text": the span rewritten with the idiom, inflected only as grammar requires. It must contain the idiom.
+3. "literal_text": the span rewritten in plain words that mean exactly what the span and the idiom mean, as close to the original wording as possible but not identical to it. No idiom, metaphor or figure of speech.
+4. Both rewritten texts must be fully grammatical with the words around the span unchanged: the idiom must take the same kind of object or clause the span took (e.g. "allow users to post" cannot become "give the green light to users to post").
+5. Keep everything the span says. Do not drop a noun, hedge, negation, quantity or detail (e.g. "the best actor" -> "the cream of the crop" drops "actor": not allowed). Do not add anything the span does not say: no extra intensity, emotion, danger, failure, success or result.
+6. Same strength: a mild span needs a mild idiom. Not allowed, for example: "disliked" -> "hated their guts"; "pleased" -> "over the moon"; "a bit annoying" -> "gets on my nerves"; "the kitchen was on fire" -> "the kitchen went up in flames" (adds destruction).
+7. Same meaning, not a neighbouring one. Not allowed, for example: "at the forefront" -> "in the spotlight" (leading vs. being watched); "the name appeared on the cover" -> "saw the light of day" (printed somewhere vs. published for the first time); "fix the problem" -> "get to the bottom of the problem" (solve vs. find the cause).
+8. Change nothing outside the span. {label_rule}
+
+Answer with one JSON object and nothing else, fields in this order:
+{{"candidates_checked": "<step A, one short line per candidate span>", "span": "...", "span_meaning": "<what the chosen span means here, with its strength>", "choice": "<idiom id from the list, or NONE>", "idiom_text": "...", "literal_text": "...", "differences": "<everything the idiom version adds, drops, strengthens or weakens compared with the original span; write none if nothing>", "verdict": "<KEEP only if differences is none and both texts are grammatical, otherwise NONE>"}}
+If the answer is NONE, "candidates_checked" must still be filled; the other fields may be empty.
+
+Idioms (id: idiom - meaning):
+{idiom_list}
+
+{context}Text:
+{x}
+
+Candidate spans (phrases of the text, with their meaning):
+{candidates}

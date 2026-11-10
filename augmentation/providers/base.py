@@ -8,6 +8,8 @@ are trivially mockable in tests.
 
 from typing import Protocol, runtime_checkable
 
+from augmentation.providers.env import load_env
+
 _PROVIDERS = ("anthropic", "gemini", "openai")
 
 
@@ -45,17 +47,20 @@ class LLMClient(Protocol):
         ...
 
 
-def build_client(provider: str, model: str) -> LLMClient:
+def build_client(provider: str, model: str, *, thinking_level: str | None = None) -> LLMClient:
     """Construct the `LLMClient` for `provider`, pinned to `model` (D1, D6, D8).
 
     The vendor SDK is imported lazily here so a run only loads the SDK of the
     selected provider, and the offline tests (which inject a mock client) load
     none of them.
     """
+    load_env()
     if provider == "gemini":
         from augmentation.providers.gemini import GeminiClient  # noqa: PLC0415
 
-        return GeminiClient(model)
+        return (
+            GeminiClient(model) if thinking_level is None else GeminiClient(model, thinking_level)
+        )
     if provider == "anthropic":
         from augmentation.providers.anthropic import AnthropicClient  # noqa: PLC0415
 

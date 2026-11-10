@@ -1,0 +1,41 @@
+You are building a controlled research dataset on idiomatic language and model robustness. Human annotators will check every item: the idiom version must preserve the meaning of the original text, keep its label, use the idiom idiomatically, and read fluently. Many texts contain a place where one of the listed idioms fits naturally, so check every candidate below before answering NONE.
+
+Task: choose ONE short window of the text and rewrite only that window so that it naturally contains one idiom from the list below, keeping exactly what the window says. The plain version of the item will be made from your rewritten window by replacing only the idiom with its literal explanation, so the idiom version and the plain version differ only in the idiom.
+
+{dataset_note}
+
+Work in this order:
+A. For EACH candidate phrase below (you may also use another part of the text): say what it means IN THIS TEXT and name the closest idiom from the list.
+B. Choose the best place and idiom that pass the test and rules below. If none passes, answer NONE.
+C. Choose the window: the candidate phrase plus, only if needed for the idiom to fit grammatically, a few neighbouring words (at most one clause, 15 words). Rewrite the window with the idiom, changing as few words as possible. Then mentally put the rewritten window into the text and check it.
+
+Example: text "Both pages allow all users to submit their own articles."; window "allow all users to submit"; idiomatic_window "give all users the green light to submit"; idiom_phrase "the green light"; literal_phrase "permission". Plain version: "give all users permission to submit".
+
+The test: would a careful reader say the idiom version still says the same thing as the original, with the same facts and the same label? An idiom naturally sounds more vivid or informal than plain words; that is fine. Good fits, for example: "left for the airport" -> "hit the road"; "the company cancelled the project" -> "the company pulled the plug on the project"; "stopped to rest" -> "caught their breath"; "very good" -> "first-rate".
+
+Reject (answer NONE) when the idiom:
+1. means a neighbouring thing rather than the same thing: "at the forefront" -> "in the spotlight" (leading vs. being watched); "the name appeared on the cover" -> "saw the light of day" (printed vs. published for the first time); "fix the problem" -> "get to the bottom of the problem" (solve vs. find the cause);
+2. clearly changes the strength: a mild statement made extreme or the reverse ("disliked" -> "hated their guts"; "pleased" -> "over the moon");
+3. adds or drops a fact, a noun, a hedge, a negation or a quantity ("the kitchen was on fire" -> "went up in flames" adds destruction; "the best actor" -> "the cream of the crop" drops "actor");
+4. would need more than the window to change, or changes words of the window that the idiom does not need;
+5. touches a technical term, name, number, or the key concept the text is about.
+
+Rules for the fields:
+- "window": copied EXACTLY from the text (same characters, case and punctuation), at most 15 words, occurring exactly once.
+- "idiomatic_window": the window rewritten with the idiom, inflected only as grammar requires; the rest of the window unchanged wherever possible.
+- "idiom_phrase": the exact words of "idiomatic_window" that form the idiom (as they appear there).
+- "literal_phrase": plain words that replace "idiom_phrase" inside "idiomatic_window" with the same meaning and strength, fitting grammatically. No idiom, metaphor or figure of speech. The resulting plain window must not be identical to the original window.
+- Change nothing outside the window. {label_rule}
+
+Answer with one JSON object and nothing else, fields in this order:
+{{"candidates_checked": "<step A, one short line per candidate>", "window": "...", "span_meaning": "<what the window means here>", "choice": "<idiom id from the list, or NONE>", "idiomatic_window": "...", "idiom_phrase": "...", "literal_phrase": "...", "differences": "<any change of facts, strength, label or grammar the idiom version causes; write none if it passes the test>", "verdict": "<KEEP if it passes the test and both versions are grammatical, otherwise NONE>"}}
+If the answer is NONE, "candidates_checked" must still be filled; the other fields may be empty.
+
+Idioms (id: idiom - meaning):
+{idiom_list}
+
+{context}Text:
+{x}
+
+Candidate phrases (with their meaning):
+{candidates}

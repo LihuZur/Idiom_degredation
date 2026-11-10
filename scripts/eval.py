@@ -24,6 +24,13 @@ from eval.base import RunResult
 from eval.config import EvalConfig
 from eval.io import load_result, write_result
 from eval.registry import get_evaluator
+from eval.reuse import (
+    ReuseError,
+    check_provenance,
+    read_xy,
+    reusable_predictions,
+)
+from eval.reuse import verify_reuse as rerun_and_compare
 from models.base import Prediction
 from models.decoder_runner import DecoderRunner
 from models.device import select_device
@@ -36,7 +43,7 @@ def resolve_variants(
     base_dir: Path = Path("datasets_out"),
 ) -> list[str]:
     """Resolve which variants to run based on exists on disk and user filter (STAGE3_PLAN §1)."""
-    possible = ["original", "paraphrase", "idiomatic"]
+    possible = ["original", "paraphrase", "idiomatic", "span_literal"]
     target_dir = base_dir / dataset
 
     if variants_arg is None:
@@ -206,6 +213,46 @@ def _make_checkpoint_callback(
     return _on_new_predictions
 
 
+def _reuse_for_variant(
+    spec: dict[str, Any],
+    cfg: EvalConfig,
+    var: str,
+    csv_path: Path,
+    evaluator: Any,
+    prompt_hash: str,
+    precision_str: str,
+    model_revision: Any,
+    limit: int | None,
+) -> tuple[dict[str, Prediction], list[AugmentedRow]]:
+    """Valid earlier predictions for one variant (see `eval.reuse`); raises if the source is invalid."""
+    src_results: Path = (
+        spec["results_dir"] / spec["dataset"] / f"{cfg.model.replace('/', '_')}.json"
+    )
+    src_csv: Path = Path("datasets_out") / spec["dataset"] / f"{var}.csv"
+    if not src_results.exists() or not src_csv.exists():
+        raise click.ClickException(f"--reuse-from: missing {src_results} or {src_csv}")
+    prior = load_result(src_results)
+    try:
+        check_provenance(
+            prior,
+            prompt_hash=prompt_hash,
+            model_id=cfg.model,
+            model_revision=model_revision,
+            precision=precision_str,
+            resolved_config=cfg.model_dump(),
+        )
+    except ReuseError as e:
+        raise click.ClickException(str(e)) from e
+    rows = evaluator._load_rows(csv_path, limit)
+    reused, report = reusable_predictions(prior, var, read_xy(src_csv), rows, evaluator)
+    skipped = ", ".join(f"{k}={v}" for k, v in sorted(report.reasons.items())) or "none"
+    click.echo(
+        f"  {var}: reusing {report.reused} of {len(rows)} predictions from "
+        f"{src_results} (to run on GPU: {len(rows) - report.reused}; not reusable: {skipped})"
+    )
+    return reused, rows
+
+
 def _run_inference(
     cfg: EvalConfig,
     dataset: str,
@@ -214,6 +261,8 @@ def _run_inference(
     evaluator: Any,
     checkpoint_file: Path | None = None,
     checkpoint_state: dict[str, Any] | None = None,
+    reuse: dict[str, Any] | None = None,
+    prompt_hash: str = "",
 ) -> dict[str, RunResult]:
     """Run model inference normally, checkpointing progress after every batch if requested."""
     model_spec = get_model_spec(cfg.model)
@@ -232,6 +281,27 @@ def _run_inference(
         already_done = {
             d["id"]: _prediction_from_checkpoint(d) for d in prior_variant.get("predictions", [])
         }
+        if reuse is not None and var in reuse["variants"]:
+            reused, rows = _reuse_for_variant(
+                reuse,
+                cfg,
+                var,
+                csv_path,
+                evaluator,
+                prompt_hash,
+                cfg.precision or model_spec.default_precision,
+                model_spec.revision,
+                limit,
+            )
+            if reuse["verify"]:
+                try:
+                    n_checked = rerun_and_compare(
+                        evaluator, runner, rows, reused, reuse["verify"], cfg.seed
+                    )
+                except ReuseError as e:
+                    raise click.ClickException(str(e)) from e
+                click.echo(f"  {var}: verified {n_checked} reused predictions by re-running them")
+            already_done = {**reused, **already_done}
         prior_wall_time = prior_variant.get("wall_time_seconds", 0.0)
         if already_done:
             click.echo(f"  {dataset}/{var}: resuming, {len(already_done)} example(s) already done")
@@ -378,6 +448,33 @@ def _build_per_task(
     help="Replay parsing + metrics from a prior result JSON.",
 )
 @click.option(
+    "--reuse-from",
+    default=None,
+    type=str,
+    help="Source dataset whose earlier results supply predictions for byte-identical rows "
+    "(e.g. sst2 for sst2_v2). Everything else is run on the model.",
+)
+@click.option(
+    "--reuse-variants",
+    default="original",
+    show_default=True,
+    help="Comma-separated variants to reuse from --reuse-from.",
+)
+@click.option(
+    "--reuse-results-dir",
+    default=Path("results"),
+    show_default=True,
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    help="Results root holding the --reuse-from dataset's result files.",
+)
+@click.option(
+    "--verify-reuse",
+    default=50,
+    show_default=True,
+    type=int,
+    help="Re-run this many reused rows per variant and fail if any output differs (plan: 50).",
+)
+@click.option(
     "--checkpoint-dir",
     default=None,
     type=click.Path(path_type=Path),
@@ -394,6 +491,10 @@ def main(
     limit: int | None,
     force: bool,
     from_results: Path | None,
+    reuse_from: str | None,
+    reuse_variants: str,
+    reuse_results_dir: Path,
+    verify_reuse: int,
     checkpoint_dir: Path | None,
 ) -> None:
     """Stage 3: evaluate model on a dataset's variant triple."""
@@ -440,8 +541,26 @@ def main(
     if from_results is not None:
         run_results = _replay_results(dataset, variants_to_run, limit, from_results, evaluator)
     else:
+        reuse = (
+            {
+                "dataset": reuse_from,
+                "variants": {v.strip() for v in reuse_variants.split(",") if v.strip()},
+                "results_dir": reuse_results_dir,
+                "verify": verify_reuse,
+            }
+            if reuse_from
+            else None
+        )
         run_results = _run_inference(
-            cfg, dataset, variants_to_run, limit, evaluator, checkpoint_file, checkpoint_state
+            cfg,
+            dataset,
+            variants_to_run,
+            limit,
+            evaluator,
+            checkpoint_file,
+            checkpoint_state,
+            reuse,
+            prompt_hash,
         )
 
     # Get y labels and build per_task

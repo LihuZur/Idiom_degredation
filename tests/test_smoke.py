@@ -51,6 +51,10 @@ def test_dataset_registry_has_sst2_mmlu_and_mnli() -> None:
         "mnli",
         "mnli_hypothesis",
         "mmlu_choices",
+        "agnews",  # v2 topic-classification dataset (THESIS_PLAN_v2 §1)
+        "agnews_wide",
+        "mmlu_wide",  # candidate pools for the v2 idiom generator
+        "mnli_wide",
     }
     models = model_reg.list_models()
     assert models == sorted(models), "list_models() must return sorted ids"

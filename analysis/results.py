@@ -2,7 +2,10 @@
 
 Parses ``results/{dataset}/{model}.json`` into pydantic models and enforces
 the "complete-triple" invariant: every loaded run must have run and recorded
-all three variants (original, paraphrase, idiomatic) for every task.
+all three variants of its dataset family for every task. Pilot datasets use
+(original, paraphrase, idiomatic); the v2 datasets (`V2_DATASETS`) use
+(original, span_literal, idiomatic). Further variants a run declares in
+`variants_run` (e.g. a reused pilot paraphrase) are loaded as well.
 """
 
 import csv
@@ -12,6 +15,13 @@ from pathlib import Path
 from pydantic import BaseModel
 
 VARIANTS: tuple[str, str, str] = ("original", "paraphrase", "idiomatic")
+VARIANTS_V2: tuple[str, str, str] = ("original", "span_literal", "idiomatic")
+V2_DATASETS: frozenset[str] = frozenset({"sst2_v2", "mnli_v2", "mmlu_v2", "agnews_v2"})
+
+
+def variants_for(dataset: str) -> tuple[str, str, str]:
+    """The (baseline, control, treatment) variant triple a dataset's results must carry."""
+    return VARIANTS_V2 if dataset in V2_DATASETS else VARIANTS
 
 
 class PerTaskVariant(BaseModel):
@@ -66,15 +76,17 @@ def load_result(path: Path) -> ResultFile:
         raw = json.load(f)
 
     variants_run: list[str] = raw["variants_run"]
-    if not set(VARIANTS).issubset(variants_run):
-        missing = set(VARIANTS) - set(variants_run)
+    required = variants_for(raw["dataset"])
+    if not set(required).issubset(variants_run):
+        missing = set(required) - set(variants_run)
         raise ValueError(
             f"{path}: incomplete variant triple — variants_run is missing {sorted(missing)}"
         )
+    extras = [v for v in variants_run if v not in required]
 
     per_task: list[PerTask] = []
     for i, entry in enumerate(raw["per_task"]):
-        missing_keys = [v for v in VARIANTS if v not in entry]
+        missing_keys = [v for v in required if v not in entry]
         if missing_keys:
             raise ValueError(
                 f"{path}: per_task[{i}] (id={entry.get('id', '?')!r}) is missing "
@@ -84,7 +96,9 @@ def load_result(path: Path) -> ResultFile:
             PerTask(
                 id=entry["id"],
                 y=entry["y"],
-                variants={v: PerTaskVariant(**entry[v]) for v in VARIANTS},
+                variants={
+                    v: PerTaskVariant(**entry[v]) for v in (*required, *extras) if v in entry
+                },
             )
         )
 
@@ -118,11 +132,14 @@ def correct_by_variant(result: ResultFile) -> dict[str, list[bool]]:
         result: A loaded, validated `ResultFile`.
 
     Returns:
-        A mapping from each of `VARIANTS` to the ordered list of `.correct`
-        booleans across `result.per_task`. All three lists are paired: same
-        length, same task order.
+        A mapping from each variant of the dataset's triple (`variants_for`) to
+        the ordered list of `.correct` booleans across `result.per_task`. All
+        lists are paired: same length, same task order.
     """
-    return {v: [task.variants[v].correct for task in result.per_task] for v in VARIANTS}
+    return {
+        v: [task.variants[v].correct for task in result.per_task]
+        for v in variants_for(result.dataset)
+    }
 
 
 def filter_to_accepted(result: ResultFile, accepted_ids: frozenset[str]) -> ResultFile:

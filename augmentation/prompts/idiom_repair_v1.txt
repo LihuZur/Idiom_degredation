@@ -1,0 +1,7 @@
+{base_prompt}
+
+REPAIR. A reviewer rejected an earlier answer for this same text:
+<earlier_idiomatic>{previous_idiomatic}</earlier_idiomatic>
+<earlier_literal>{previous_literal}</earlier_literal>
+<reviewer_reason>{reason}</reviewer_reason>
+Write a new answer that avoids this problem and follows every rule above. You may keep the same idiom if the problem can be fixed, or choose another idiom from the list. Answer with one JSON object in the same format as above, or NONE if no idiom fits.

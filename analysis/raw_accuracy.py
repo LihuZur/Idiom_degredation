@@ -1,10 +1,14 @@
-"""Raw per-variant accuracy table: original / paraphrase / idiomatic, per model and dataset."""
+"""Raw per-variant accuracy table per model and dataset.
+
+Pilot datasets report original / paraphrase / idiomatic; v2 datasets report
+original / span_literal / idiomatic (`analysis.results.variants_for`).
+"""
 
 import pandas as pd
 from scipy.stats import chi2
 
 from analysis.aggregate import RunStats
-from analysis.results import VARIANTS, correct_by_variant
+from analysis.results import correct_by_variant, variants_for
 
 _COLUMNS = ["dataset", "model_id", "n", "variant", "correct", "acc", "ci_low", "ci_high"]
 _SOLE_COLUMNS = ["dataset", "model_id", "n_orig_correct", "b", "c", "diff", "chi2", "p"]
@@ -22,7 +26,8 @@ def sole_cause_table(runs: list[RunStats], datasets: tuple[str, ...]) -> pd.Data
     """Per-model sole-cause counts, matching the definitions in `idiom-variant-confusion`.
 
     Among rows the model got right on the original: `b` = idiomatic wrong while
-    paraphrase right, `c` = paraphrase wrong while idiomatic right; `diff = b - c`.
+    the control (paraphrase, or span_literal for v2 datasets) right, `c` = control
+    wrong while idiomatic right; `diff = b - c`.
     A `POOLED` row sums b and c over models (indicative only: a row that is hard
     for many models is counted many times).
     """
@@ -34,9 +39,8 @@ def sole_cause_table(runs: list[RunStats], datasets: tuple[str, ...]) -> pd.Data
         tot_b = tot_c = tot_orig = 0
         for run in ds_runs:
             flags = correct_by_variant(run.result)
-            trio = list(
-                zip(flags["original"], flags["paraphrase"], flags["idiomatic"], strict=True)
-            )
+            base, control, treat = variants_for(dataset)
+            trio = list(zip(flags[base], flags[control], flags[treat], strict=True))
             b = sum(o and p and not i for o, p, i in trio)
             c = sum(o and not p and i for o, p, i in trio)
             n_orig = sum(o for o, _, _ in trio)
@@ -86,7 +90,7 @@ def raw_accuracy_table(runs: list[RunStats], datasets: tuple[str, ...]) -> pd.Da
     for dataset in datasets:
         ds_runs = [r for r in runs if r.result.dataset == dataset]
         for run in sorted(ds_runs, key=lambda r: r.result.model_id):
-            for variant in VARIANTS:
+            for variant in variants_for(dataset):
                 est = run.boot.acc[variant]
                 rows.append(
                     {
@@ -100,7 +104,7 @@ def raw_accuracy_table(runs: list[RunStats], datasets: tuple[str, ...]) -> pd.Da
                         "ci_high": est.ci_high,
                     }
                 )
-        for variant in VARIANTS:
+        for variant in variants_for(dataset):
             points = [r.boot.acc[variant].point for r in ds_runs]
             if points:
                 rows.append(

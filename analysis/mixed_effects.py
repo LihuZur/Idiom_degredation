@@ -1,4 +1,8 @@
-"""RQ1/RQ2 mixed-effects re-analysis.
+"""RQ1/RQ2 mixed-effects re-analysis (course-data RQ files).
+
+Not yet the v2 primary model: THESIS_PLAN_v2 §0c pre-registers a mixed-effects *logistic* regression
+`correct ~ variant + log_params + (1|item) + (1|model)` with Holm over the 4 datasets; that model is
+still to be implemented at the analysis step (plan step 11). What follows is the RQ1/RQ2 linear version.
 
 RQ1 (paper_preparations/RQ1_meaning_preservation.md §5 step 8): fits
 `is_correct ~ arm + (1 | row_id) + (1 | model_id)` via statsmodels

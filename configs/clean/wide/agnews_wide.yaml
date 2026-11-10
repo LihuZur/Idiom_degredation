@@ -1,0 +1,19 @@
+dataset: agnews_wide
+seed: 0
+
+# Candidate pool for the v2 idiom generator: the whole test split (as wide/agnews, 7,410 rows after
+# the filters) + the first 20,000 train rows. The old wide/agnews pool is a byte-identical subset.
+hf_revision: eb185aade064a813bc0b7f42de02595523103ca4
+
+length:
+  min_tokens: 20
+  max_tokens: 80
+
+max_rows: null
+
+normalize:
+  - nfc
+  - html_artifacts
+  - collapse_whitespace
+
+dedupe: true

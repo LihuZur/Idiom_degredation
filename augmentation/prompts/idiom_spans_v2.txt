@@ -1,0 +1,8 @@
+Below is a short text. Propose up to 4 different phrases (2 to 8 words each, copied EXACTLY from the text, non-overlapping, each occurring exactly once in the text) that could be replaced by an idiomatic expression with the same meaning without changing what the text says. For each phrase give a short plain-language statement of what it means in this context.
+
+{dataset_note}
+
+Text:
+{x}
+
+Answer with a JSON list and nothing else: [{{"span": "...", "meaning": "..."}}]

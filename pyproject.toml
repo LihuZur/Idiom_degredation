@@ -57,6 +57,18 @@ idiom-rate-opacity = "scripts.rate_opacity:main"
 idiom-arm-effect = "scripts.arm_effect:main"
 idiom-robustness = "scripts.robustness_check:main"
 idiom-raw-accuracy = "scripts.raw_accuracy:main"
+idiom-build-inventory = "scripts.build_inventory:main"
+idiom-finalize-inventory = "scripts.finalize_inventory:main"
+idiom-inventory-extras = "scripts.inventory_extras:main"
+idiom-extra-metrics = "scripts.extra_metrics:main"
+idiom-power-sim = "scripts.power_sim:main"
+idiom-generate = "scripts.generate_v2:main"
+idiom-insert = "scripts.generate_v3:main"
+idiom-check = "scripts.checker:main"
+idiom-analyze-v3 = "scripts.analyze_v3:main"
+idiom-order-pool = "scripts.order_pool:main"
+idiom-tag-domains = "scripts.tag_domains:main"
+idiom-labelstudio = "scripts.labelstudio:main"
 
 [dependency-groups]
 dev = [

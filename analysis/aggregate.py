@@ -2,16 +2,20 @@
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 import pandas as pd
 
 from analysis.results import (
+    VARIANTS,
+    VARIANTS_V2,
     ResultFile,
     correct_by_variant,
     discover_results,
     filter_to_accepted,
     load_accepted_ids,
     load_result,
+    variants_for,
 )
 from analysis.stats import BootstrapResult, paired_bootstrap
 
@@ -52,8 +56,9 @@ def bootstrap_by_run(
     seed: int,
     accepted_only: bool = False,
     datasets_dir: Path = Path("datasets_out"),
+    family: Literal["legacy", "v2"] = "legacy",
 ) -> list[RunStats]:
-    """Load every discovered result file and compute its paired bootstrap.
+    """Load every discovered result file of one variant family and compute its paired bootstrap.
 
     Args:
         results_dir: Root directory containing ``{dataset}/{model}.json`` files.
@@ -65,9 +70,12 @@ def bootstrap_by_run(
             (RQ1 §5 step 7), looked up once per dataset and cached.
         datasets_dir: Root directory containing ``{dataset}/meaning_accept.csv``
             files; only consulted when `accepted_only` is True.
+        family: `"legacy"` keeps the pilot datasets (original / paraphrase /
+            idiomatic); `"v2"` keeps the v2 datasets (original / span_literal /
+            idiomatic). Result files of the other family are skipped.
 
     Returns:
-        One `RunStats` per discovered result file, in discovery order.
+        One `RunStats` per discovered result file of the family, in discovery order.
 
     Raises:
         FileNotFoundError: If `accepted_only` is True and a discovered
@@ -77,6 +85,8 @@ def bootstrap_by_run(
     stats: list[RunStats] = []
     for path in discover_results(results_dir):
         result = load_result(path)
+        if variants_for(result.dataset) != (VARIANTS if family == "legacy" else VARIANTS_V2):
+            continue
         if accepted_only:
             if result.dataset not in accepted_ids_by_dataset:
                 accepted_ids_by_dataset[result.dataset] = load_accepted_ids(
@@ -88,6 +98,7 @@ def bootstrap_by_run(
             n_resamples=n_resamples,
             ci=ci,
             seed=seed,
+            variants=variants_for(result.dataset),
         )
         stats.append(RunStats(result=result, boot=boot))
     return stats

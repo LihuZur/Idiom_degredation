@@ -1,0 +1,21 @@
+You are building a controlled research dataset on idiomatic language and model robustness.
+
+Pick ONE idiom from the list below and use it to replace ONE short phrase (the "span") of the text, so that the text still reads naturally and keeps exactly the same meaning. Then write a plain literal replacement for the same span, so that the two versions differ only inside that span.
+
+{dataset_note}
+
+Rules:
+1. "span": a contiguous piece of the text copied EXACTLY (same characters, case and punctuation), preferably 2 to 8 words long, that occurs exactly once in the text and that the idiom can naturally replace.
+2. "idiom_text": the span rewritten with the chosen idiom, inflected only as much as grammar requires (tense, person, possessive). It must contain the idiom. The whole sentence must stay grammatical: check the prepositions, verb forms and word order around the span.
+3. "literal_text": the same span rewritten in plain, literal language that means what the idiom means (use the idiom's meaning) and fits the same grammatical slot. It must have the same strength and register as the original span: do not add intensifiers (very, extremely, completely, severely, strongly, ...) or softeners. It must NOT contain any idiom, metaphor or figure of speech.
+4. Change nothing outside the span. Do not add, remove or change any fact, name, number or logical relationship. {label_rule}
+5. The idiom's meaning must match the meaning of the span closely, not just be related to it. If no idiom in the list fits naturally and closely, answer with choice "NONE".
+
+Answer with one JSON object and nothing else:
+{{"choice": "<idiom id from the list, or NONE>", "span": "...", "idiom_text": "...", "literal_text": "..."}}
+
+Idioms (id: idiom - meaning; example of use):
+{idiom_list}
+
+{context}Text:
+{x}

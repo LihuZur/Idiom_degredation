@@ -6,7 +6,7 @@ a fallback ambiguity proxy for idioms absent from the opacity norms
 (`data/norms/opacity.py`).
 
 MAGPIE does *not* contain a continuous opacity/decomposability score — each
-instance is a per-sentence literal/idiomatic/figurative/other usage label
+instance is a per-sentence idiomatic / literal / other usage label ("i" / "l" / "o"; 7 rows "?")
 (confirmed against the real corpus; the plan's original assumption of an
 `idiomaticity_score` field was wrong). What it does give, aggregated per
 idiom type, is how often that idiom's usage was actually judged idiomatic

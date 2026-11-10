@@ -1,0 +1,38 @@
+You are building a controlled research dataset on idiomatic language and model robustness. Human annotators will check every item: the idiom version must preserve the meaning of the original text, keep its label, use the idiom idiomatically, and read fluently. Many texts contain a phrase that one of the listed idioms can express, so check every candidate span below before answering NONE.
+
+Task: replace ONE short phrase (the "span") of the text with one idiom from the list below, and give the literal explanation of the idiom for the same span. The two versions differ only inside the span.
+
+{dataset_note}
+
+Work in this order:
+A. For EACH candidate span below (you may also use another short phrase of the text): say what it means IN THIS TEXT and name the closest idiom from the list.
+B. Choose the best span-idiom pair that passes the test and rules below. If none passes, answer NONE.
+C. Write "idiom_text" and "literal_text" as replacements for the span ONLY (never the whole text): for the span "gave up", idiom_text is "threw in the towel" and literal_text is "quit". Then mentally put each one into the text and check it.
+
+The test: would a careful reader say the idiom version still says the same thing as the original, with the same facts and the same label? An idiom naturally sounds more vivid, informal or a little stronger than plain words; that is fine and is not a change of strength. Good fits, for example: "left for the airport" -> "hit the road"; "the company cancelled the project" -> "the company pulled the plug on the project"; "stopped to rest" -> "caught their breath"; "very good" -> "first-rate"; "high costs hurt sales" -> "high costs took a toll on sales"; "the party changed its position" -> "the party changed its tune".
+
+Reject (answer NONE) when the idiom:
+1. means a neighbouring thing rather than the same thing: "at the forefront" -> "in the spotlight" (leading vs. being watched); "the name appeared on the cover" -> "saw the light of day" (printed vs. published for the first time); "fix the problem" -> "get to the bottom of the problem" (solve vs. find the cause);
+2. changes the strength by a whole step: a mild statement made extreme or the reverse ("disliked" -> "hated their guts"; "pleased" -> "over the moon");
+3. adds or drops a fact, a noun, a hedge, a negation or a quantity ("the kitchen was on fire" -> "went up in flames" adds destruction; "the best actor" -> "the cream of the crop" drops "actor");
+4. does not fit the grammar of the slot ("allow users to post" cannot become "give the green light to users to post");
+5. touches a technical term, name, number, or the key concept the text is about.
+
+Rules for the fields:
+- "span": copied EXACTLY from the text (same characters, case and punctuation), preferably 2 to 8 words, occurring exactly once.
+- "idiom_text": the span rewritten with the idiom, inflected only as grammar requires. It must contain the idiom.
+- "literal_text": the literal explanation of the idiom in this context, fitting the same slot, in plain words that differ from the original span (it is the paraphrase control) but keep the same meaning and strength. No idiom, metaphor or figure of speech.
+- Change nothing outside the span. {label_rule}
+
+Answer with one JSON object and nothing else, fields in this order:
+{{"candidates_checked": "<step A, one short line per candidate span>", "span": "...", "span_meaning": "<what the chosen span means here>", "choice": "<idiom id from the list, or NONE>", "idiom_text": "...", "literal_text": "...", "differences": "<any change of facts, strength, label or grammar the idiom version causes; write none if it passes the test>", "verdict": "<KEEP if it passes the test and both texts are grammatical, otherwise NONE>"}}
+If the answer is NONE, "candidates_checked" must still be filled; the other fields may be empty.
+
+Idioms (id: idiom - meaning):
+{idiom_list}
+
+{context}Text:
+{x}
+
+Candidate spans (phrases of the text, with their meaning):
+{candidates}

@@ -18,7 +18,9 @@ _HF_DATASET_ID = "cais/mmlu"
 _CHOICE_LETTERS = "ABCD"
 
 
-def _iter_mmlu_rows(hf_revision: str) -> Iterable[dict[str, Any]]:
+def _iter_mmlu_rows(
+    hf_revision: str, splits: tuple[str, ...] = ("validation",)
+) -> Iterable[dict[str, Any]]:
     """Shared row enumeration for `MmluLoader` and `MmluChoicesLoader`.
 
     Both loaders read `cais/mmlu` config `"all"`, HF `validation` split, in HF
@@ -28,11 +30,12 @@ def _iter_mmlu_rows(hf_revision: str) -> Iterable[dict[str, Any]]:
     mirroring `data/mnli.py`'s `_iter_selected_pairs`.
     """
     ds = load_dataset(_HF_DATASET_ID, "all", revision=hf_revision)
-    validation = ds["validation"]
-    for i, raw_row in enumerate(validation):
-        row = cast(dict[str, Any], raw_row)
-        row["_row_index"] = i
-        yield row
+    for split in splits:
+        for i, raw_row in enumerate(ds[split]):
+            row = cast(dict[str, Any], raw_row)
+            row["_row_index"] = i
+            row["_split"] = split
+            yield row
 
 
 def encode_choices(choices: list[str]) -> str:
@@ -131,4 +134,35 @@ class MmluChoicesLoader:
                 x=encode_choices(cast(list[str], row["choices"])),
                 y=row["answer"],
                 meta=meta,
+            )
+
+
+@register_dataset("mmlu_wide")
+class MmluWideLoader:
+    """Candidate pool for idiom insertion: `validation` (ids unchanged) plus the `test` split.
+
+    Only a fraction of questions has a phrase an inventory idiom can replace, so the v2 generator
+    needs a larger pool than the 1,531-question `validation` split. Test-split ids are
+    `test/{subject}/{row_index}`, so they cannot collide with the `mmlu` ids.
+    """
+
+    name = "mmlu_wide"
+    hf_dataset_id = _HF_DATASET_ID
+
+    def __init__(self, *, hf_revision: str, normalize: list[str]) -> None:
+        self._hf_revision = hf_revision
+        del normalize
+
+    def load(self) -> Iterable[DatasetRow]:
+        for row in _iter_mmlu_rows(self._hf_revision, ("validation", "test")):
+            prefix = "" if row["_split"] == "validation" else "test/"
+            yield DatasetRow(
+                id=f"{prefix}{row['subject']}/{row['_row_index']}",
+                x=row["question"],
+                y=row["answer"],
+                meta={
+                    "subject": row["subject"],
+                    "choices": row["choices"],
+                    "answer_index": row["answer"],
+                },
             )

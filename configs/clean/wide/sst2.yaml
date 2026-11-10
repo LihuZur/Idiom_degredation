@@ -1,0 +1,18 @@
+dataset: sst2
+seed: 0
+
+# Candidate pool for the v2 idiom generator. Same loader, seed and shuffle as configs/clean/sst2.yaml,
+# so the first 2,000 rows are the existing pool; only the cap differs (25,901 rows survive the filters).
+hf_revision: 8d51e7e4887a4caaa95b3fbebbf53c0490b58bbb
+
+length:
+  min_tokens: 10
+  max_tokens: 100
+
+max_rows: 12000
+
+normalize:
+  - nfc
+  - collapse_whitespace
+
+dedupe: true

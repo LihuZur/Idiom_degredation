@@ -1,6 +1,7 @@
 """MNLI (MultiNLI) raw dataset loader (MNLI_DATASET_PLAN §5.1)."""
 
 from collections.abc import Iterable
+from itertools import chain, islice
 from typing import Any, TypedDict, cast
 
 from datasets import load_dataset
@@ -18,6 +19,7 @@ _LABEL_NAMES = ("entailment", "neutral", "contradiction")
 _SPLITS = ("validation_matched", "validation_mismatched")
 
 _HF_DATASET_ID = "nyu-mll/multi_nli"
+_WIDE_TRAIN_PAIRS = 20000
 
 
 class _SelectedPair(TypedDict):
@@ -32,7 +34,9 @@ class _SelectedPair(TypedDict):
     genre: str
 
 
-def _iter_selected_pairs(hf_revision: str) -> Iterable[_SelectedPair]:
+def _iter_selected_pairs(
+    hf_revision: str, splits: tuple[str, ...] = _SPLITS
+) -> Iterable[_SelectedPair]:
     """Yield one pair per premise — the first pair seen for each `promptID` (R5).
 
     Shared by `MnliLoader` (RQ1 chapter: rewrites the premise) and
@@ -52,7 +56,7 @@ def _iter_selected_pairs(hf_revision: str) -> Iterable[_SelectedPair]:
     """
     ds = load_dataset(_HF_DATASET_ID, revision=hf_revision)
     seen_prompt_ids: set[int] = set()
-    for split_name in _SPLITS:
+    for split_name in splits:
         for raw_row in ds[split_name]:
             row = cast(dict[str, Any], raw_row)
             label = cast(int, row["label"])
@@ -141,6 +145,46 @@ class MnliHypothesisLoader:
                 y=pair["label"],
                 meta={
                     "premise": pair["premise"],
+                    "label_name": pair["label_name"],
+                    "prompt_id": pair["prompt_id"],
+                    "genre": pair["genre"],
+                },
+            )
+
+
+@register_dataset("mnli_wide")
+class MnliWideLoader:
+    """Candidate pool for idiom insertion: both validation halves (same ids as `mnli`) plus the
+    first 20,000 premises of `train`, so every existing row and its GPU results stay in the pool.
+    Until 2026-10-18 it took 6,000; the train premises are a prefix, so that pool is a subset.
+
+    One pair per premise, like `MnliLoader`; the training split has the same genres as
+    `validation_matched`.
+    """
+
+    name = "mnli_wide"
+    hf_dataset_id = _HF_DATASET_ID
+
+    def __init__(self, *, hf_revision: str, normalize: list[str]) -> None:
+        self._hf_revision = hf_revision
+        del normalize
+
+    def load(self) -> Iterable[DatasetRow]:
+        validation = list(_iter_selected_pairs(self._hf_revision))
+        taken = {p["pair_id"] for p in validation} | {p["premise"] for p in validation}
+        # A few training premises also occur in validation (same pairID); skip them.
+        extra = (
+            p
+            for p in _iter_selected_pairs(self._hf_revision, ("train",))
+            if p["pair_id"] not in taken and p["premise"] not in taken
+        )
+        for pair in chain(validation, islice(extra, _WIDE_TRAIN_PAIRS)):
+            yield DatasetRow(
+                id=pair["pair_id"],
+                x=pair["premise"],
+                y=pair["label"],
+                meta={
+                    "hypothesis": pair["hypothesis"],
                     "label_name": pair["label_name"],
                     "prompt_id": pair["prompt_id"],
                     "genre": pair["genre"],

@@ -1,0 +1,8 @@
+Below is a short text. List EVERY phrase of it (up to 6, each 1 to 8 words, copied EXACTLY from the text, non-overlapping, each occurring exactly once) that expresses an action, a judgement, a feeling, a state, a change or a situation that an English idiom could express. Skip names, numbers, dates and technical terms. Prefer several candidates over one: a later step will check which of them really has an idiom with the same meaning. For each phrase give a short plain-language statement of what it means in this context.
+
+{dataset_note}
+
+Text:
+{x}
+
+Answer with a JSON list and nothing else: [{{"span": "...", "meaning": "..."}}]

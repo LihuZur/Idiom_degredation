@@ -1,0 +1,18 @@
+dataset: agnews
+seed: 0
+
+# Candidate pool for the v2 idiom generator: every row that survives the filters (7,410).
+hf_revision: eb185aade064a813bc0b7f42de02595523103ca4
+
+length:
+  min_tokens: 20
+  max_tokens: 80
+
+max_rows: null
+
+normalize:
+  - nfc
+  - html_artifacts
+  - collapse_whitespace
+
+dedupe: true

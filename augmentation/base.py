@@ -6,7 +6,7 @@ from typing import Any, Literal, Protocol, runtime_checkable
 from augmentation.providers.base import LLMClient
 from data.base import DatasetRow
 
-Variant = Literal["original", "paraphrase", "idiomatic"]
+Variant = Literal["original", "paraphrase", "idiomatic", "span_literal"]
 
 
 @dataclass(frozen=True, slots=True)

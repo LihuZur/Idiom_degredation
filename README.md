@@ -54,7 +54,7 @@ manipulation is weakly coupled to the decision. Sentiment survives rewording
 *sharpen* the signal), and an MMLU answer still hinges on knowledge sitting in
 the untouched `choices`. An entailment label, by contrast, turns on a *literal*
 reading of the premise, so a figurative surface forces a resolution step that can
-fail — the failure mode documented in IMPLI (Stowe et al., ACL 2022) and
+fail — IMPLI (Stowe et al., ACL 2022) shows MNLI models fail mainly on non-entailing idiomatic pairs; see also
 Figurative-NLI.
 
 **MNLI specifics.** Source is `nyu-mll/multi_nli`, both validation splits
@@ -252,11 +252,11 @@ is re-runnable independently of the earlier stages.
 
 ## 7. Phases & Milestones
 
-> **Thesis phase (2026-10-17):** the active research plan is
-> `paper_preparations/THESIS_PLAN_v2.md` (local, gitignored); execution status is
-> in `local/RQ_STATUS.md`. Planned code changes: AG News dataset, a 4th
-> `span_literal` variant, controlled single-idiom generation with recorded
-> metadata, calibrated single judge + repair loop.
+> **Thesis phase (2026-10-30):** the active research plan is
+> `paper_preparations/THESIS_PLAN_v3.md` (local, gitignored; insertion design, supersedes v2); execution status is
+> in `local/RQ_STATUS.md`. Done: AG News dataset, the v3 insertion generator (`idiom-insert`, prompt
+> `idiom_insert_v2.txt` frozen; the literal version is written as the `span_literal` variant). Planned: human gold,
+> a calibrated AI checker from a non-Google family + repair loop, the mixed-effects logistic analysis.
 
 | Phase | Goal | Key outputs |
 |-------|------|-------------|
@@ -494,6 +494,37 @@ uv run idiom-arm-overlap
 # Paste each over the matching table block in main.tex, matched by \label.
 # Never hand-edit those blocks in main.tex — edit this generator instead.
 uv run idiom-report-tables
+
+# v2 thesis work (see local/RQ_STATUS.md "v2 re-plan"):
+# raw per-variant accuracy tables -> analysis/tables/raw_accuracy.*
+uv run idiom-raw-accuracy
+# closed idiom inventory: MIDAS-EN x human norms -> data/norms/_files/inventory/idiom_inventory.csv
+# (needs data/norms/_files/midas/EN_Idioms.json); review the match_checked column, then apply it:
+uv run idiom-build-inventory
+uv run idiom-finalize-inventory          # -> idiom_inventory_final.csv + before/after counts
+# natural-idiom candidates in the cleaned pools, and IMPLI glosses for inventory idioms
+uv run idiom-inventory-extras natural
+uv run idiom-inventory-extras impli      # reads IMPLI TSVs from /tmp/impli_data
+# unnormed second tier: MIDAS idioms MAGPIE attests as common (>= 5 idiomatic BNC uses), then keep only
+# figurative ones and tag their domain (~16 Gemini calls) -> idiom_inventory_magpie.csv, idiom_domains_magpie.csv
+uv run idiom-inventory-extras magpie     # -> idiom_inventory_magpie_candidates.csv (offline)
+uv run idiom-inventory-extras magpie-tag --run
+# v2 generation (dry-run is the default and spends nothing; sync / batch call the LLM)
+uv run idiom-clean --config configs/clean/agnews.yaml
+uv run idiom-clean --config configs/clean/wide/sst2.yaml --out-dir datasets_out/wide   # candidate pools (also wide/agnews, agnews_wide, mmlu_wide, mnli_wide; mnli_wide = validation + 20,000 train premises; agnews_wide = test + 20,000 train rows, label-conflicting duplicates dropped)
+uv run idiom-tag-domains --run           # idiom source domains for the AG News shortlist (a few cents)
+# defaults (frozen 2026-10-18): pick prompt idiom_span_v5.txt, normed inventory + MAGPIE tier (--normed-only to drop it),
+# retrieval shortlist of 12, one attempt, call 1 at thinking MINIMAL and call 2 at LOW. The BGE embedder loads from the local cache: prefix HF_HUB_OFFLINE=1 in a sandbox.
+uv run idiom-generate --dataset sst2 --pool datasets_out/wide/sst2/original.csv --n 50                # dry run: writes datasets_out/sst2_v2/dry_run_prompts.jsonl
+uv run idiom-generate --dataset sst2 --pool datasets_out/wide/sst2/original.csv --n 50 --mode sync    # real generation -> datasets_out/sst2_v2/ (resumable: replies are cached)
+uv run idiom-generate --dataset mmlu --pool datasets_out/wide/mmlu_wide/original.csv --mode sync --max-items 1000  # yield check = the first 1,000 items of the full run (a later full run reuses its replies)
+uv run idiom-generate --dataset sst2 --pool datasets_out/wide/sst2/original.csv --mode sync --target-kept 1000   # full run, stops once 1,000 items passed
+uv run idiom-labelstudio gold-tasks --dataset sst2          # human validation tasks; also blind-tasks, import
+uv run idiom-eval --config configs/eval/qwen3p5_1p5b_instruct.yaml --dataset sst2_v2 \
+  --reuse-from sst2 --verify-reuse 50                       # reuse valid pilot predictions, run the rest
+uv run idiom-raw-accuracy --family v2
+uv run idiom-extra-metrics                                  # U, parse failures, rank stability (--family v2 for v2)
+uv run idiom-power-sim --n-grid 300,400,500,600,800,1000,1500   # power vs item count from the pilot
 ```
 
 ### The `_significant` cut
