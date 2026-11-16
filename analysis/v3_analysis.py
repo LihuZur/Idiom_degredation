@@ -33,9 +33,14 @@ _MIN_OUTCOMES = 2  # need both right and wrong answers to fit the model
 VERSIONS = {"idiomatic": "idiomatic", "span_literal": "literal", "original": "original"}
 
 
-def _idioms(data_dir: Path) -> dict[str, str]:
+def _idioms(data_dir: Path) -> dict[str, dict[str, Any]]:
+    """Per item: the idiom and its ratings (familiarity / opacity: human norms, 543 idioms; log frequency: all)."""
     with (data_dir / "idiomatic.csv").open(encoding="utf-8", newline="") as f:
-        return {r["id"]: json.loads(r["meta"])["idiom"]["idiom"] for r in csv.DictReader(f)}
+        out: dict[str, dict[str, Any]] = {}
+        for r in csv.DictReader(f):
+            rec = json.loads(r["meta"])["idiom"]
+            out[r["id"]] = {k: rec.get(k) for k in ("idiom", "familiarity", "opacity", "log_freq")}
+        return out
 
 
 def load_long(
@@ -60,7 +65,11 @@ def load_long(
                         "model": model,
                         "log_params": math.log(params),
                         "item": str(task["id"]),
-                        "idiom": idioms.get(str(task["id"]), ""),
+                        "idiom": str(idioms.get(str(task["id"]), {}).get("idiom", "")),
+                        **{
+                            k: idioms.get(str(task["id"]), {}).get(k)
+                            for k in ("familiarity", "opacity", "log_freq")
+                        },
                         "version": version,
                         "correct": int(bool(task[key]["correct"])),
                         "parse_ok": task[key].get("parse_status") == "ok",
@@ -202,3 +211,49 @@ def per_model(df: pd.DataFrame, *, n_boot: int = 5000, seed: int = 0) -> pd.Data
             }
         )
     return pd.DataFrame(out)
+
+
+SECONDARY_TERMS = ("task", "model_size", "familiarity", "opacity", "log_freq")
+
+
+def fit_secondary(df: pd.DataFrame, term: str, *, seed: int = 0) -> list[dict[str, Any]]:
+    """One secondary question: the main regression over all tasks (task intercepts, item and model random effects)
+    with one added interaction. `task`: idiomatic x task (vs the first task); `model_size`: idiomatic x log size;
+    idiom ratings: idiomatic x rating (centred), on items whose idiom has that rating. Exploratory (plan §5)."""
+    from statsmodels.genmod.bayes_mixed_glm import BinomialBayesMixedGLM  # noqa: PLC0415
+
+    d = pd.DataFrame(df[df["version"].isin(["idiomatic", "literal"])]).copy()
+    d["idiomatic"] = (d["version"] == "idiomatic").astype(float)
+    d["log_params_c"] = d["log_params"] - float(np.mean(np.asarray(d["log_params"], dtype=float)))
+    if term == "task":
+        formula = "correct ~ idiomatic * C(dataset) + log_params_c"
+    elif term == "model_size":
+        formula = "correct ~ idiomatic * log_params_c + C(dataset)"
+    else:
+        d = pd.DataFrame(d[d[term].notna()]).copy()
+        vals = np.asarray(d[term], dtype=float)
+        d["mod_c"] = (vals - vals.mean()) / (vals.std() or 1.0)  # per 1 SD
+        formula = "correct ~ idiomatic * mod_c + log_params_c + C(dataset)"
+    np.random.seed(seed)
+    fit: Any = BinomialBayesMixedGLM.from_formula(
+        formula, {"item": "0 + C(item)", "model": "0 + C(model)"}, d
+    ).fit_vb()
+    rows: list[dict[str, Any]] = []
+    for j, name in enumerate(fit.model.exog_names):
+        if not (name.startswith("idiomatic:") or (name.startswith("idiomatic") and ":" in name)):
+            continue
+        mean, sd = float(fit.fe_mean[j]), float(fit.fe_sd[j])
+        z = mean / sd if sd > 0 else float("nan")
+        rows.append(
+            {
+                "question": term,
+                "term": name,
+                "n_rows": len(d),
+                "n_items": len(set(d["item"].tolist())),
+                "log_odds": round(mean, 4),
+                "ci_low": round(mean - 1.96 * sd, 4),
+                "ci_high": round(mean + 1.96 * sd, 4),
+                "p_approx": float(2 * (1 - norm.cdf(abs(z)))),
+            }
+        )
+    return rows

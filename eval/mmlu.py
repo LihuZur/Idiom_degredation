@@ -10,6 +10,8 @@ from eval.base import BaseEvaluator, strip_reasoning_trace
 from eval.registry import register_evaluator
 from models.base import FormattedInput
 
+_LEADING_LETTER = re.compile(r"^\(?([A-D])(?:[).:,\s]|$|(?=[A-Z]))")
+
 
 @register_evaluator("mmlu")
 class MmluEvaluator(BaseEvaluator):
@@ -49,9 +51,18 @@ class MmluEvaluator(BaseEvaluator):
         )
 
     def parse(self, raw: str, ex: AugmentedRow) -> tuple[str | None, Literal["ok", "unparseable"]]:
-        s = strip_reasoning_trace(raw).strip().upper()
-        # Find first standalone character A, B, C, or D using word boundaries
-        match = re.search(r"\b([A-D])\b", s)
+        text = strip_reasoning_trace(raw).strip()
+        # A letter at the very start wins: "B", "B)", "(B)", "B." or glued to the explanation ("ASocrates ...",
+        # v3 POC 2026-11-11). Without this, the uppercased article "a" later in the text could be read as A.
+        if whole := re.fullmatch(
+            r"\(?([a-dA-D])[).:]?", text
+        ):  # the whole answer is one letter, any case
+            return {"A": "0", "B": "1", "C": "2", "D": "3"}[whole.group(1).upper()], "ok"
+        if lead := _LEADING_LETTER.match(text):
+            return {"A": "0", "B": "1", "C": "2", "D": "3"}[lead.group(1)], "ok"
+        # Otherwise the first standalone capital A-D, searched in the original case so that the article "a"
+        # is not read as option A (it was, when the whole answer used to be uppercased first).
+        match = re.search(r"\b([A-D])\b", text)
         if match:
             char = match.group(1)
             mapping = {"A": "0", "B": "1", "C": "2", "D": "3"}

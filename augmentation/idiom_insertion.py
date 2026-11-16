@@ -139,6 +139,24 @@ TEXTS_BY_TEMPLATE: dict[str, dict[str, DatasetText]] = {
     "idiom_insert_v1.txt": DATASET_TEXT,
     "idiom_insert_v2.txt": DATASET_TEXT_V2,
 }
+# v3 (blind candidate, advisors 2026-11-15, plan O37): the generator sees no label, no task and no fixed context
+# (MNLI hypothesis, MMLU choices); one shared example written for the prompt, not taken from any dataset. The
+# template uses only {example}, {idiom_list} and {x}; the other fields are left empty.
+BLIND_EXAMPLE = (
+    'Text: "After weeks of arguing, the two neighbours agreed to forget their quarrel and start again."\n'
+    '{"choice": "<id>", "idiomatic": "After weeks of arguing, the two neighbours agreed to bury the hatchet and '
+    'start again.", "idiom_text": "bury the hatchet", "literal_text": "make peace", "literal": "After weeks of '
+    'arguing, the two neighbours agreed to make peace and start again.", "check": "same content; same meaning; '
+    'natural", "verdict": "KEEP"}'
+)
+BLIND_TEMPLATES = frozenset({"idiom_insert_v3.txt", "idiom_insert_v4.txt"})
+TEXTS_BY_TEMPLATE["idiom_insert_v3.txt"] = {
+    ds: replace(t, note="", rule="", question="", example=BLIND_EXAMPLE)
+    for ds, t in DATASET_TEXT_V2.items()
+}
+# v4 (2026-11-16): v3 with v2's allowance for small additions restored ("the meaning may shift a little…"); v3's
+# "same conclusions, and nothing more" made Gemini answer NONE on 62% of POC-2 run 1 (plan §11).
+TEXTS_BY_TEMPLATE["idiom_insert_v4.txt"] = TEXTS_BY_TEMPLATE["idiom_insert_v3.txt"]
 EXAMPLE_IDS = frozenset(t.example_id for t in DATASET_TEXT.values())
 
 
@@ -204,6 +222,19 @@ def mixed_shortlist(
     out = [by_id[j] for j in fit] + extra
     rng.shuffle(out)
     return out
+
+
+def whole_bank(pool: Sequence[Idiom], rng: random.Random | None) -> list[Idiom]:
+    """Every open idiom of the bank (plan O41, decided 2026-11-16). With `rng`, shuffled per item and attempt;
+    without, in one fixed order (by idiom id), so every prompt shares the same long prefix and Gemini can serve it
+    from its prompt cache."""
+    out = sorted(pool, key=lambda i: (i.name.lower(), i.idiom_id))
+    if rng is not None:
+        rng.shuffle(out)
+    return out
+
+
+SHORTLIST_MODES = ("mixed", "all")
 
 
 @dataclass(frozen=True, slots=True)
@@ -299,6 +330,7 @@ def insert_record(
     model: str,
     p_hash: str,
     shortlist_size: int,
+    shortlist_mode: str = "mixed",
 ) -> dict[str, Any]:
     start = p.idiomatic.index(p.idiom_text)
     return {
@@ -323,7 +355,9 @@ def insert_record(
         "insertion": "v3",
         "attempts": attempt,
         "shortlist_size": shortlist_size,
-        "shortlist_mode": f"mixed_{N_FIT}fit_{N_RANDOM}random",
+        "shortlist_mode": f"mixed_{N_FIT}fit_{N_RANDOM}random"
+        if shortlist_mode == "mixed"
+        else "whole_bank",
         "generator_model": model,
         "prompt_hash": p_hash,
     }
@@ -350,6 +384,8 @@ def generate_insert(
     attempts: int = ATTEMPTS,
     template: str = TEMPLATE_FILE,
     per_item_seed: bool = True,
+    shortlist: str = "mixed",
+    bank_order: str = "fixed",
 ) -> list[Outcome]:
     """Items whose original already contains a bank idiom are skipped without an AI call."""
     rng = random.Random(seed)
@@ -367,7 +403,11 @@ def generate_insert(
             fresh = [i for i in open_ if i.idiom_id not in state.shown.get(item.id, set())]
             # A retry shows idioms not seen before; only a tiny bank runs out, then all open ones.
             r = item_rng(seed, item.id, attempt) if per_item_seed else rng
-            short = mixed_shortlist(item, fresh or open_, retriever, r)
+            short = (
+                whole_bank(open_, r if bank_order == "shuffled" else None)
+                if shortlist == "all"
+                else mixed_shortlist(item, fresh or open_, retriever, r)
+            )
             state.shown.setdefault(item.id, set()).update(i.idiom_id for i in short)
             lists.append(short)
             prompts.append(render_insert_prompt(item, short, template))
@@ -388,6 +428,7 @@ def generate_insert(
                     model=model,
                     p_hash=p_hash,
                     shortlist_size=len(short),
+                    shortlist_mode=shortlist,
                 )
                 done[item.id] = Outcome(
                     item,

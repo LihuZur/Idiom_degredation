@@ -79,3 +79,5 @@ class GeminiClient:
             self.usage["input_tokens"] += meta.prompt_token_count or 0
             self.usage["output_tokens"] += meta.candidates_token_count or 0
             self.usage["thinking_tokens"] += meta.thoughts_token_count or 0
+            # Input tokens Gemini served from its prompt cache (billed at a lower rate; plan O41 cost).
+            self.usage["cached_input_tokens"] += meta.cached_content_token_count or 0

@@ -18,6 +18,7 @@ import click
 from augmentation.cache import ResponseCache
 from augmentation.idiom_generation import (
     Idiom,
+    Item,
     cached_completer,
     load_inventory,
     load_pool,
@@ -35,6 +36,7 @@ from augmentation.idiom_insertion import (
     item_rng,
     mixed_shortlist,
     render_insert_prompt,
+    whole_bank,
 )
 from augmentation.idiom_retrieval import IdiomRetriever, bge_embedder
 from augmentation.providers.base import build_client
@@ -71,6 +73,19 @@ def load_bank(cache_dir: Path) -> tuple[list[Idiom], IdiomIndex, IdiomRetriever]
     return idioms, IdiomIndex(inv_rows, min_tokens=2, min_content=1), _retriever(idioms, cache_dir)
 
 
+def _items_from_logs(items_all: Sequence[Item], folders: Sequence[Path]) -> list[Item]:
+    """Exactly the items an earlier run attempted (ids from its generation_log.csv, in order)."""
+    by_id = {i.id: i for i in items_all}
+    wanted: list[str] = []
+    for folder in folders:
+        with (folder / "generation_log.csv").open(encoding="utf-8", newline="") as f:
+            wanted += [row["id"] for row in csv.DictReader(f) if row["id"] not in wanted]
+    missing = [w for w in wanted if w not in by_id]
+    if missing:
+        raise click.ClickException(f"{len(missing)} ids not in the pool, e.g. {missing[:3]}")
+    return [by_id[w] for w in wanted]
+
+
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})
 @click.option("--dataset", type=click.Choice(sorted(_POOLS)), required=True)
 @click.option(
@@ -91,7 +106,9 @@ def load_bank(cache_dir: Path) -> tuple[list[Idiom], IdiomIndex, IdiomRetriever]
 @click.option("--max-output-tokens", type=int, default=2048, show_default=True)
 @click.option(
     "--template",
-    type=click.Choice(["idiom_insert_v1.txt", "idiom_insert_v2.txt"]),
+    type=click.Choice(
+        ["idiom_insert_v1.txt", "idiom_insert_v2.txt", "idiom_insert_v3.txt", "idiom_insert_v4.txt"]
+    ),
     default=TEMPLATE_FILE,
     show_default=True,
     help="Prompt version (v1 = E1 2026-10-30; another version means new cache keys, i.e. a paid run).",
@@ -102,6 +119,34 @@ def load_bank(cache_dir: Path) -> tuple[list[Idiom], IdiomIndex, IdiomRetriever]
     multiple=True,
     type=click.Path(exists=True, file_okay=False, path_type=Path),
     help="Earlier output folder(s) of this dataset; their item ids are not sampled again (repeatable).",
+)
+@click.option(
+    "--ids-from",
+    "ids_from",
+    multiple=True,
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    help="Earlier output folder(s) of this dataset: re-run exactly their attempted items (all ids in their "
+    "generation_log.csv, in order) instead of sampling; --n is ignored (POC-2, plan step 8d).",
+)
+@click.option(
+    "--shortlist",
+    type=click.Choice(["mixed", "all"]),
+    default="mixed",
+    show_default=True,
+    help="mixed: 20 fit + 10 random idioms; all: the whole bank, shuffled per item (plan O41, POC-2).",
+)
+@click.option(
+    "--max-items",
+    type=int,
+    default=None,
+    help="With --ids-from: use only the first N of those items (a small paid test before the full run).",
+)
+@click.option(
+    "--bank-order",
+    type=click.Choice(["fixed", "shuffled"]),
+    default="fixed",
+    show_default=True,
+    help="With --shortlist all: fixed = one order for every prompt (cacheable prefix, cheaper); shuffled = per item.",
 )
 @click.option(
     "--shortlist-seed",
@@ -140,6 +185,10 @@ def main(
     max_output_tokens: int,
     template: str,
     exclude_from: tuple[Path, ...],
+    ids_from: tuple[Path, ...],
+    shortlist: str,
+    bank_order: str,
+    max_items: int | None,
     shortlist_seed: str,
     cap: int,
     workers: int,
@@ -155,7 +204,11 @@ def main(
         with (folder / "generation_log.csv").open(encoding="utf-8", newline="") as f:
             used |= {row["id"] for row in csv.DictReader(f)}
     candidates = [i for i in items_all if i.id not in used]
-    items = stratified_sample(candidates, n, seed)
+    if ids_from:
+        items = _items_from_logs(items_all, ids_from)[:max_items]
+        n = len(items)
+    else:
+        items = stratified_sample(candidates, n, seed)
     if len(items) < n:  # per-stratum rounding can fall short; top up deterministically
         picked = {i.id for i in items}
         rest = [i for i in candidates if i.id not in picked]
@@ -179,7 +232,14 @@ def main(
         prompts = [
             render_insert_prompt(
                 i,
-                mixed_shortlist(
+                whole_bank(
+                    idioms,
+                    None
+                    if bank_order == "fixed"
+                    else (item_rng(seed, i.id, 1) if shortlist_seed == "item" else rng),
+                )
+                if shortlist == "all"
+                else mixed_shortlist(
                     i,
                     idioms,
                     retriever,
@@ -195,8 +255,9 @@ def main(
                 f.write(json.dumps({"id": item.id, "prompt": prompt}, ensure_ascii=False) + "\n")
         mean_chars = sum(map(len, prompts)) / len(prompts)
         click.echo(
-            f"dry run: {len(prompts)} prompts for {dataset} (template {template}, {N_FIT} fit + "
-            f"{N_RANDOM} random idioms), prompt_hash={p_hash}; mean {mean_chars:.0f} characters "
+            f"dry run: {len(prompts)} prompts for {dataset} (template {template}, "
+            f"{'whole bank' if shortlist == 'all' else f'{N_FIT} fit + {N_RANDOM} random idioms'}), "
+            f"prompt_hash={p_hash}; mean {mean_chars:.0f} characters "
             f"≈ {mean_chars / _CHARS_PER_TOKEN:.0f} input tokens (estimate); wrote {target / 'dry_run_prompts.jsonl'}"
         )
         click.echo("--- first prompt ---\n" + prompts[0])
@@ -252,6 +313,8 @@ def main(
         seed=seed,
         template=template,
         per_item_seed=shortlist_seed == "item",
+        shortlist=shortlist,
+        bank_order=bank_order,
     )
     counts = write_outputs(
         target,
@@ -269,7 +332,10 @@ def main(
             "template": template,
             "shortlist_seed": shortlist_seed,
             "excluded_ids_from": [str(p) for p in exclude_from],
-            "shortlist": f"{N_FIT} fit + {N_RANDOM} random",
+            "ids_from": [str(p) for p in ids_from],
+            "shortlist": f"whole bank ({bank_order} order)"
+            if shortlist == "all"
+            else f"{N_FIT} fit + {N_RANDOM} random",
             "cap": cap,
             "thinking": thinking,
             "temperature": temperature,

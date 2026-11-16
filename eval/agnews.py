@@ -10,6 +10,19 @@ from eval.registry import register_evaluator
 from models.base import FormattedInput
 
 # Label codes follow the HF ClassLabel order (data/agnews.py LABEL_NAMES).
+_LEADING = re.compile(r"^(sci/tech|sci-tech|science|technology|business|sports?|world|sci|tech)")
+_LEADING_CODE = {
+    "world": "0",
+    "sport": "1",
+    "sports": "1",
+    "business": "2",
+    "sci/tech": "3",
+    "sci-tech": "3",
+    "science": "3",
+    "technology": "3",
+    "sci": "3",
+    "tech": "3",
+}
 _PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("0", re.compile(r"\bworld\b")),
     ("1", re.compile(r"\bsports?\b")),
@@ -51,6 +64,10 @@ class AgNewsEvaluator(BaseEvaluator):
 
     def parse(self, raw: str, ex: AugmentedRow) -> tuple[str | None, Literal["ok", "unparseable"]]:
         s = strip_reasoning_trace(raw).strip().lower()
+        # A label at the very start wins, even when the next word is glued on ("Worldthe snippet ...",
+        # v3 POC 2026-11-11); otherwise a label word echoed later in the answer could be picked instead.
+        if lead := _LEADING.match(s):
+            return _LEADING_CODE[lead.group(1)], "ok"
         best: tuple[int, str] | None = None
         for code, pattern in _PATTERNS:
             m = pattern.search(s)

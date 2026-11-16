@@ -12,6 +12,7 @@ Paid modes (`--mode sync`) need the provider and model named explicitly: which c
 
 import csv
 import json
+import math
 from collections import Counter
 from pathlib import Path
 from typing import Any
@@ -175,6 +176,14 @@ def run_cmd(
     """Checker verdict for every pair (dry-run renders the prompts and estimates tokens; no call)."""
     keys = _read_keys(keys_from)
     items = [i for i in _items(runs) if keys is None or i["key"] in keys]
+    dup = [k for k, n in Counter(i["key"] for i in items).items() if n > 1]
+    if (
+        dup
+    ):  # verdicts are keyed by task:id, so the same item from two runs would overwrite (2026-11-16)
+        raise click.UsageError(
+            f"{len(dup)} items appear in more than one --run (e.g. {dup[0]}); check each run separately "
+            "with its own --out-dir"
+        )
     stem = Path(template).stem
     if mode == "dry-run":
         target = out_dir / f"{stem}__dry_run"
@@ -485,6 +494,192 @@ def _repair_dry_run(
         f"dry run: {len(tasks)} rejected items -> {out_dir / 'dry_run_prompts.jsonl'} "
         f"({REPAIR_TEMPLATE}); no call made"
     )
+
+
+_POOL_DIRS = {"sst2": "sst2", "mnli": "mnli_wide", "mmlu": "mmlu_wide", "agnews": "agnews_wide"}
+
+
+def label_balance(
+    drawn: dict[str, str],
+    kept: set[str],
+    accepted: set[str] | None,
+    pool: list[str] | None = None,
+) -> list[dict[str, Any]]:
+    """Per label: count and share in the pool / drawn / kept by code / accepted by the filter; χ² p-value of the
+    drawn sample against the pool shares and of each later stage against the drawn shares (plan O39)."""
+    from scipy.stats import chisquare  # noqa: PLC0415
+
+    stages: dict[str, list[str]] = {"drawn": list(drawn), "kept": [i for i in drawn if i in kept]}
+    if accepted is not None:
+        stages["accepted"] = [i for i in stages["kept"] if i in accepted]
+    labels = sorted(set(drawn.values()))
+    base = Counter(drawn.values())
+    rows: list[dict[str, Any]] = []
+    if pool is not None:
+        pc = Counter(pool)
+        n_d = len(drawn)
+        p_d = float(
+            chisquare(
+                [base[lab] for lab in labels], [pc[lab] / len(pool) * n_d for lab in labels]
+            ).pvalue
+        )
+        for lab in labels:
+            rows.append(
+                {
+                    "stage": "pool",
+                    "label": lab,
+                    "n": pc[lab],
+                    "share": round(pc[lab] / len(pool) * 100, 1),
+                    "p_vs_drawn": float("nan"),
+                }
+            )
+        rows += [
+            {
+                "stage": "drawn_vs_pool",
+                "label": "",
+                "n": n_d,
+                "share": float("nan"),
+                "p_vs_drawn": p_d,
+            }
+        ]
+    for stage, ids in stages.items():
+        c = Counter(drawn[i] for i in ids)
+        n = len(ids)
+        p = float("nan")
+        if stage != "drawn" and n:
+            exp = [base[lab] / len(drawn) * n for lab in labels]
+            p = float(chisquare([c[lab] for lab in labels], exp).pvalue)
+        for lab in labels:
+            rows.append(
+                {
+                    "stage": stage,
+                    "label": lab,
+                    "n": c[lab],
+                    "share": round(c[lab] / n * 100, 1) if n else float("nan"),
+                    "p_vs_drawn": p,
+                }
+            )
+    return rows
+
+
+@main.command("balance")
+@_run_opt
+@click.option(
+    "--verdicts",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="verdicts.jsonl of a filter run; accepted = not rejected.",
+)
+@click.option(
+    "--pools", type=click.Path(path_type=Path), default=Path("datasets_out/wide"), show_default=True
+)
+@click.option("--out", type=click.Path(dir_okay=False, path_type=Path), default=None)
+def balance_cmd(
+    runs: tuple[Path, ...], verdicts: Path | None, pools: Path, out: Path | None
+) -> None:
+    """Label distribution of drawn vs code-kept vs filter-accepted rows, per dataset (plan O39)."""
+    accepted: set[str] | None = None
+    if verdicts is not None:
+        accepted = {k for k, v in _load_verdicts(verdicts).items() if not v.rejects}
+    all_rows: list[dict[str, Any]] = []
+    for d in _DATASETS:
+        logs = [
+            r / d / "generation_log.csv" for r in runs if (r / d / "generation_log.csv").exists()
+        ]
+        if not logs:
+            continue
+        with (pools / _POOL_DIRS[d] / "original.csv").open(encoding="utf-8", newline="") as f:
+            pool_rows = list(csv.DictReader(f))
+        pool = {r["id"]: r["y"] for r in pool_rows}
+        words = sorted(len(r["x"].split()) for r in pool_rows)
+        cuts = (words[len(words) // 3], words[2 * len(words) // 3])
+        length = {
+            r["id"]: ("short", "medium", "long")[
+                (len(r["x"].split()) >= cuts[0]) + (len(r["x"].split()) >= cuts[1])
+            ]
+            for r in pool_rows
+        }
+        drawn: dict[str, str] = {}
+        for log in logs:
+            with log.open(encoding="utf-8", newline="") as f:
+                for r in csv.DictReader(f):
+                    drawn[f"{d}:{r['id']}"] = pool[r["id"]]
+        kept = {
+            i["key"] for r in runs if (r / d / "idiomatic.csv").exists() for i in load_v3(r / d, d)
+        }
+        for row in label_balance(drawn, kept, accepted, list(pool.values())):
+            all_rows.append({"dataset": d, **row})
+        # same report by text length (pool word-count terciles): do skipped / rejected items lean one way?
+        drawn_len = {k: length[k.split(":", 1)[1]] for k in drawn}
+        for row in label_balance(drawn_len, kept, accepted, list(length.values())):
+            all_rows.append({"dataset": f"{d} (length)", **row})
+    for d in dict.fromkeys(r["dataset"] for r in all_rows):
+        rows = [r for r in all_rows if r["dataset"] == d]
+        if not rows:
+            continue
+        click.echo(f"== {d}")
+        for stage in dict.fromkeys(r["stage"] for r in rows):
+            part = [r for r in rows if r["stage"] == stage]
+            p = part[0]["p_vs_drawn"]
+            if stage == "drawn_vs_pool":
+                click.echo(f"  drawn vs pool: χ² p = {p:.2f}")
+                continue
+            cells = "  ".join(f"{r['label']}: {r['n']} ({r['share']}%)" for r in part)
+            click.echo(
+                f"  {stage:<9} {cells}" + ("" if math.isnan(p) else f"   χ² p vs drawn = {p:.2f}")
+            )
+    if out is not None:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        with out.open("w", encoding="utf-8", newline="") as f:
+            w = csv.DictWriter(
+                f, fieldnames=["dataset", "stage", "label", "n", "share", "p_vs_drawn"]
+            )
+            w.writeheader()
+            w.writerows(all_rows)
+        click.echo(f"-> {out}")
+
+
+@main.command("keep")
+@_run_opt
+@click.option(
+    "--verdicts",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    required=True,
+    help="verdicts.jsonl of the filter run; rows it rejects (or could not parse) are dropped.",
+)
+@click.option("--suffix", default="_v3poc2", show_default=True, help="Output dataset name suffix.")
+@click.option(
+    "--out-root", type=click.Path(path_type=Path), default=Path("datasets_out"), show_default=True
+)
+def keep_cmd(runs: tuple[Path, ...], verdicts: Path, suffix: str, out_root: Path) -> None:
+    """Write the filter-accepted pairs as evaluation datasets <task><suffix>/ (plan O38, step 8d)."""
+    accepted = {k for k, v in _load_verdicts(verdicts).items() if not v.rejects}
+    for d in _DATASETS:
+        rows: dict[str, list[dict[str, str]]] = {
+            "original": [],
+            "idiomatic": [],
+            "span_literal": [],
+        }
+        fields: dict[str, list[str]] = {}
+        for run in runs:
+            if not (run / d / "idiomatic.csv").exists():
+                continue
+            for version in rows:
+                with (run / d / f"{version}.csv").open(encoding="utf-8", newline="") as f:
+                    reader = csv.DictReader(f)
+                    fields[version] = list(reader.fieldnames or [])
+                    rows[version] += [r for r in reader if f"{d}:{r['id']}" in accepted]
+        if not fields:
+            continue
+        target = out_root / f"{d}{suffix}"
+        target.mkdir(parents=True, exist_ok=True)
+        ids = {r["id"] for r in rows["idiomatic"]} & {r["id"] for r in rows["span_literal"]}
+        for version, rs in rows.items():
+            with (target / f"{version}.csv").open("w", encoding="utf-8", newline="") as f:
+                w = csv.DictWriter(f, fieldnames=fields[version])
+                w.writeheader()
+                w.writerows(r for r in rs if r["id"] in ids)
+        click.echo(f"{d}: {len(ids)} accepted pairs -> {target}")
 
 
 if __name__ == "__main__":

@@ -176,3 +176,38 @@ def test_per_item_seed_gives_the_same_shortlist_in_any_sample(tmp_path: Path) ->
     assert prompts["alone"][0] == prompts["pair"][1]
     assert item_rng(3, "a", 1).random() == item_rng(3, "a", 1).random()
     assert item_rng(3, "a", 1).random() != item_rng(3, "a", 2).random()
+
+
+def test_whole_bank_shows_every_idiom_and_records_the_mode(tmp_path: Path) -> None:
+    inv, index = setup_inventory(tmp_path)
+    prompts: list[str] = []
+
+    def complete(ps: Sequence[str]) -> list[str | None]:
+        prompts.extend(ps)
+        return [_reply() for _ in ps]
+
+    out = generate_insert(
+        [Item("sst2", "a", X, "1", {})], inv, index, complete, None,
+        model="m", p_hash="h", cap=5, seed=0, template="idiom_insert_v3.txt", shortlist="all",
+    )  # fmt: skip
+    listed = prompts[0].split("Idioms (id: idiom - meaning):")[1].split("Text:")[0]
+    assert all(f"{i.idiom_id}: " in listed for i in inv)
+    assert out[0].record is not None and out[0].record["shortlist_mode"] == "whole_bank"
+    assert out[0].record["shortlist_size"] == len(inv)
+
+
+def test_fixed_bank_order_gives_every_item_the_same_idiom_list(tmp_path: Path) -> None:
+    inv, index = setup_inventory(tmp_path)
+    prompts: list[str] = []
+
+    def complete(ps: Sequence[str]) -> list[str | None]:
+        prompts.extend(ps)
+        return [_reply() for _ in ps]
+
+    items = [Item("sst2", "a", X, "1", {}), Item("sst2", "b", "The film was long.", "1", {})]
+    generate_insert(
+        items, inv, index, complete, None,
+        model="m", p_hash="h", cap=5, seed=0, template="idiom_insert_v4.txt", shortlist="all",
+    )  # fmt: skip
+    lists = [p.split("Idioms (id: idiom - meaning):")[1].split("Text:")[0] for p in prompts]
+    assert lists[0] == lists[1]

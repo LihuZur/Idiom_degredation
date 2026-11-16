@@ -9,7 +9,15 @@ from pathlib import Path
 import click
 import pandas as pd
 
-from analysis.v3_analysis import accuracy_table, fit_main, holm, load_long, per_model
+from analysis.v3_analysis import (
+    SECONDARY_TERMS,
+    accuracy_table,
+    fit_main,
+    fit_secondary,
+    holm,
+    load_long,
+    per_model,
+)
 
 
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})
@@ -54,12 +62,23 @@ def main(
         r["p_holm"] = p
     main_df = pd.DataFrame(main_rows)
     main_df.to_csv(out_dir / "main_test.csv", index=False)
+    sens = [fit_main(g, idiom_effect=True) for _, g in df.groupby("dataset")]
+    pd.DataFrame(sens).to_csv(out_dir / "main_test_with_idiom_effect.csv", index=False)
+    sec = pd.DataFrame([r for t in SECONDARY_TERMS for r in fit_secondary(df, t)])
+    sec.to_csv(out_dir / "secondary.csv", index=False)
     pm = per_model(df, n_boot=n_boot)
     pm.to_csv(out_dir / "per_model.csv", index=False)
     with pd.option_context("display.width", 200, "display.max_columns", 20):
         click.echo(
             "== main test (per task)\n" + main_df.drop(columns=["estimator"]).to_string(index=False)
         )
+        click.echo(
+            "\n== main test with an idiom random effect (sensitivity, O27)\n"
+            + pd.DataFrame(sens)[
+                ["dataset", "log_odds_idiomatic", "ci_low", "ci_high", "p_approx"]
+            ].to_string(index=False)
+        )
+        click.echo("\n== secondary questions (exploratory)\n" + sec.to_string(index=False))
         click.echo("\n== per-model check\n" + pm.to_string(index=False))
     click.echo(f"\ntables -> {out_dir}")
 

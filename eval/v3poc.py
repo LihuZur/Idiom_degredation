@@ -26,3 +26,24 @@ class MmluV3PocEvaluator(MmluEvaluator):
 @register_evaluator("agnews_v3poc")
 class AgNewsV3PocEvaluator(AgNewsEvaluator):
     dataset = "agnews_v3poc"
+
+
+# POC-2 (plan v3 step 8d, advisors 2026-11-15): pairs from the blind prompt v3 that passed the cheap filter.
+@register_evaluator("sst2_v3poc2")
+class Sst2V3Poc2Evaluator(Sst2Evaluator):
+    dataset = "sst2_v3poc2"
+
+
+@register_evaluator("mnli_v3poc2")
+class MnliV3Poc2Evaluator(MnliEvaluator):
+    dataset = "mnli_v3poc2"
+
+
+@register_evaluator("mmlu_v3poc2")
+class MmluV3Poc2Evaluator(MmluEvaluator):
+    dataset = "mmlu_v3poc2"
+
+
+@register_evaluator("agnews_v3poc2")
+class AgNewsV3Poc2Evaluator(AgNewsEvaluator):
+    dataset = "agnews_v3poc2"
