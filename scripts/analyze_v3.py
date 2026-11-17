@@ -33,6 +33,13 @@ from analysis.v3_analysis import (
 @click.option(
     "--idiom-effect", is_flag=True, help="Add an idiom random effect to the main test (plan O27)."
 )
+@click.option(
+    "--valid-from",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="Review CSV with `key` (task:id) and `action`: analyse only the rows marked valid (e.g. the pairs that "
+    "pass both the filter and a reader; POC-2 clean subset).",
+)
 @click.option("--n-boot", type=int, default=5000, show_default=True)
 @click.option(
     "--out-dir",
@@ -41,7 +48,13 @@ from analysis.v3_analysis import (
     show_default=True,
 )
 def main(
-    results_dir: Path, suffix: str, tasks: str, idiom_effect: bool, n_boot: int, out_dir: Path
+    results_dir: Path,
+    suffix: str,
+    tasks: str,
+    idiom_effect: bool,
+    valid_from: Path | None,
+    n_boot: int,
+    out_dir: Path,
 ) -> None:
     """Analyse v3 results: main test, per-model check, accuracy / parse rates."""
     frames = []
@@ -54,6 +67,13 @@ def main(
     if not frames:
         raise click.ClickException("no results found")
     df = pd.concat(frames, ignore_index=True)
+    if valid_from is not None:
+        review = pd.read_csv(valid_from, dtype=str)
+        valid = set(review.loc[review["action"] == "valid", "key"].tolist())
+        keys = df["dataset"].str.replace(suffix, "", regex=False) + ":" + df["item"]
+        before = df["item"].nunique()
+        df = pd.DataFrame(df[keys.isin(valid)]).reset_index(drop=True)
+        click.echo(f"--valid-from: kept {df['item'].nunique()} of {before} items")
     out_dir.mkdir(parents=True, exist_ok=True)
     acc = accuracy_table(df)
     acc.to_csv(out_dir / "accuracy_parse.csv", index=False)

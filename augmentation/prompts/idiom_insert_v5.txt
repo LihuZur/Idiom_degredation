@@ -1,0 +1,28 @@
+You are building a controlled research dataset on idioms. Human annotators will check every item.
+
+Task: insert ONE idiom from the list below into the text, then write the same text again with only that idiom replaced by its plain meaning.
+
+Step 1. Idiomatic version. Put the idiom into the text so that it reads naturally and is used in its figurative meaning. You may turn a phrase of the text into the idiom, add a short phrase or clause that contains it, or rewrite a small part of the text around it. Change other words only where this is needed to fit the idiom in grammatically and naturally; leave everything else exactly as it is. The meaning may shift a little, and what you add may comment on or add a small detail to what the text says, but:
+- Keep everything the text states or implies: its facts and claims, who does what, any opinion or attitude and its strength. A reader must still reach the same overall conclusions from your version as from the original.
+- Add no new names or numbers, and remove nothing the text says. Keep names, numbers and technical or specialised terms exactly as they are.
+- If the text is a question or a task (for example, it ends with "?" or ":" or contains a blank "____"), it must stay exactly that: do not complete it, do not answer it, and add nothing after its last words; put the idiom in an earlier part of the text instead, or answer NONE.
+- Do not add a judgement of whether a statement in the text is true or false, or whether an action in it is right or wrong, and do not replace the words that state what is being asked or judged.
+- Use the idiom once, inflected only as grammar requires; add no other idiom or metaphor.
+- The idiom must make sense where it stands, and its literal words must not clash with the text (for example, birds that nest in trees should not "put down roots").
+- The text must stay grammatical, including "a"/"an" and agreement.
+
+Step 2. Literal version. Copy your idiomatic version word for word and replace only the idiom's words with their plain meaning in this context: plain words, no idiom or figure of speech, the same meaning and strength as the idiom has here, and grammatical in the same place. Nothing else may differ between the two versions, so they mean the same.
+
+Step 3. Check. Would a reader still reach the same overall conclusions from your idiomatic version as from the original? If the original was a question or a task, is your version still exactly that, with nothing added after its last words? Do the two versions mean the same? Is the idiom used figuratively and naturally, and are both versions grammatical? Most texts can take at least one of the listed idioms, so consider several before answering NONE; but never force one: an idiom that does not make sense where it stands, reads unnaturally, breaks the grammar or changes the conclusions a reader would draw is worse than NONE.
+
+Answer with one JSON object and nothing else:
+{{"choice": "<idiom id from the list, or NONE>", "idiomatic": "<the full idiomatic text>", "idiom_text": "<the idiom's words exactly as they appear in idiomatic>", "literal_text": "<the plain-meaning words that replace idiom_text>", "literal": "<the full literal text: idiomatic with idiom_text replaced by literal_text>", "check": "<one line: same content, same meaning, naturalness, grammar>", "verdict": "<KEEP or NONE>"}}
+
+EXAMPLE (for illustration only). It demonstrates the steps and the answer format on a different text. Do not let it influence your answer: do not reuse its idiom, its wording, or its kind of change (adding or rewriting) unless your own text calls for it.
+{example}
+
+Idioms (id: idiom - meaning). Read the whole list before choosing; its order is random and means nothing:
+{idiom_list}
+
+Text:
+{x}

@@ -14,6 +14,7 @@ import csv
 import json
 import math
 from collections import Counter
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -129,6 +130,21 @@ _run_opt = click.option(
 )
 
 
+def majority(
+    runs: Sequence[Mapping[str, tuple[str | None, Verdict]]],
+) -> dict[str, tuple[str | None, Verdict]]:
+    """Per key: reject if most runs reject (an unparsable run counts as a reject); the kept verdict is the first run
+    that agrees with the majority (IdioLink §3.2.4, plan O20)."""
+    if len(runs) == 1:
+        return dict(runs[0])
+    out: dict[str, tuple[str | None, Verdict]] = {}
+    for key in runs[0]:
+        rej = [r[key][1].rejects for r in runs]
+        decided = sum(rej) * 2 > len(rej)
+        out[key] = next(r[key] for r in runs if r[key][1].rejects == decided)
+    return out
+
+
 @main.command("run")
 @_run_opt
 @click.option(
@@ -147,6 +163,14 @@ _run_opt = click.option(
 )
 @click.option("--temperature", type=float, default=0.0, show_default=True)
 @click.option("--max-output-tokens", type=int, default=1024, show_default=True)
+@click.option(
+    "--votes",
+    type=int,
+    default=1,
+    show_default=True,
+    help="Run the checker N times and reject by majority (IdioLink §3.2.4: 3 runs; plan O20). Run 1 reuses the "
+    "single-run cache; runs 2..N get their own cache keys.",
+)
 @click.option("--workers", type=int, default=8, show_default=True)
 @click.option(
     "--out-dir",
@@ -169,6 +193,7 @@ def run_cmd(
     keys_from: Path | None,
     temperature: float,
     max_output_tokens: int,
+    votes: int,
     workers: int,
     out_dir: Path,
     cache_dir: Path,
@@ -209,16 +234,21 @@ def run_cmd(
             "warning: the generator is Gemini; the plan requires a checker from another family (V1)"
         )
     client = build_client(provider, model)
-    complete = sync_completer(
-        client,
-        ResponseCache(cache_dir),
-        checker_hash(template),
-        temperature=temperature,
-        max_output_tokens=max_output_tokens,
-        workers=workers,
-    )
-    results = run_checker(items, complete, template)
-    target = out_dir / f"{stem}__{provider}_{model.replace('/', '_')}"
+    runs_out: list[dict[str, tuple[str | None, Verdict]]] = []
+    for n in range(1, votes + 1):
+        ns = checker_hash(template) if n == 1 else f"{checker_hash(template)}:vote{n}"
+        complete = sync_completer(
+            client,
+            ResponseCache(cache_dir),
+            ns,
+            temperature=temperature,
+            max_output_tokens=max_output_tokens,
+            workers=workers,
+        )
+        runs_out.append(run_checker(items, complete, template))
+    results = majority(runs_out)
+    suffix = "" if votes == 1 else f"__votes{votes}"
+    target = out_dir / f"{stem}__{provider}_{model.replace('/', '_')}{suffix}"
     target.mkdir(parents=True, exist_ok=True)
     with (target / "verdicts.jsonl").open("w", encoding="utf-8") as f:
         for key, (raw, v) in results.items():
@@ -235,6 +265,7 @@ def run_cmd(
                 "n_items": len(items),
                 "runs": [str(r) for r in runs],
                 "keys_from": str(keys_from) if keys_from else None,
+                "votes": votes,
                 "usage_this_run": dict(getattr(client, "usage", {}) or {}),
             },
             indent=1,
@@ -680,6 +711,38 @@ def keep_cmd(runs: tuple[Path, ...], verdicts: Path, suffix: str, out_root: Path
                 w.writeheader()
                 w.writerows(r for r in rs if r["id"] in ids)
         click.echo(f"{d}: {len(ids)} accepted pairs -> {target}")
+
+
+@main.command("positions")
+@_run_opt
+def positions_cmd(runs: tuple[Path, ...]) -> None:
+    """Where the chosen idiom sat in the list shown (quarters, top first) and idiom variety, per run (plan O41)."""
+    for run in runs:
+        pos: list[float] = []
+        names: list[str] = []
+        for d in _DATASETS:
+            f = run / d / "idiomatic.csv"
+            if not f.exists():
+                continue
+            with f.open(encoding="utf-8", newline="") as fh:
+                for r in csv.DictReader(fh):
+                    rec = json.loads(r["meta"])["idiom"]
+                    shown = list(rec.get("shown_ids") or [])
+                    chosen = str(rec["midas_ids"]).split("|")[0]
+                    names.append(str(rec["idiom"]))
+                    if chosen in shown:
+                        pos.append(shown.index(chosen) / len(shown))
+        if not pos:
+            click.echo(f"{run}: no recorded lists (shown_ids)")
+            continue
+        q = [sum(a <= x < a + 0.25 for x in pos) / len(pos) for a in (0, 0.25, 0.5, 0.75)]
+        c = Counter(names)
+        top10 = sum(v for _, v in c.most_common(10)) / len(names)
+        click.echo(
+            f"{run}: {len(pos)} picks; by quarter of the list (top first) "
+            + " / ".join(f"{x:.0%}" for x in q)
+            + f"; {len(c)} distinct idioms in {len(names)} pairs, top-10 share {top10:.0%}"
+        )
 
 
 if __name__ == "__main__":

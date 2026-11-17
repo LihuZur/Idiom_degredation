@@ -47,3 +47,20 @@ class MmluV3Poc2Evaluator(MmluEvaluator):
 @register_evaluator("agnews_v3poc2")
 class AgNewsV3Poc2Evaluator(AgNewsEvaluator):
     dataset = "agnews_v3poc2"
+
+
+# POC-3 (plan v3 step 8e, 2026-11-17): prompt v5, 20 fit + 10 random idioms; pairs accepted by both luna (3 votes)
+# and the Claude review. No MMLU (decision pending, O47).
+@register_evaluator("sst2_v3poc3")
+class Sst2V3Poc3Evaluator(Sst2Evaluator):
+    dataset = "sst2_v3poc3"
+
+
+@register_evaluator("mnli_v3poc3")
+class MnliV3Poc3Evaluator(MnliEvaluator):
+    dataset = "mnli_v3poc3"
+
+
+@register_evaluator("agnews_v3poc3")
+class AgNewsV3Poc3Evaluator(AgNewsEvaluator):
+    dataset = "agnews_v3poc3"

@@ -31,6 +31,8 @@ from augmentation.idiom_insertion import (
     N_FIT,
     N_RANDOM,
     TEMPLATE_FILE,
+    bank_in_order,
+    bank_order_index,
     generate_insert,
     insert_prompt_hash,
     item_rng,
@@ -107,7 +109,13 @@ def _items_from_logs(items_all: Sequence[Item], folders: Sequence[Path]) -> list
 @click.option(
     "--template",
     type=click.Choice(
-        ["idiom_insert_v1.txt", "idiom_insert_v2.txt", "idiom_insert_v3.txt", "idiom_insert_v4.txt"]
+        [
+            "idiom_insert_v1.txt",
+            "idiom_insert_v2.txt",
+            "idiom_insert_v3.txt",
+            "idiom_insert_v4.txt",
+            "idiom_insert_v5.txt",
+        ]
     ),
     default=TEMPLATE_FILE,
     show_default=True,
@@ -136,6 +144,12 @@ def _items_from_logs(items_all: Sequence[Item], folders: Sequence[Path]) -> list
     help="mixed: 20 fit + 10 random idioms; all: the whole bank, shuffled per item (plan O41, POC-2).",
 )
 @click.option(
+    "--n-fit", type=int, default=N_FIT, show_default=True, help="Shortlist: idioms by fit."
+)
+@click.option(
+    "--n-random", type=int, default=N_RANDOM, show_default=True, help="Shortlist: random idioms."
+)
+@click.option(
     "--max-items",
     type=int,
     default=None,
@@ -143,10 +157,10 @@ def _items_from_logs(items_all: Sequence[Item], folders: Sequence[Path]) -> list
 )
 @click.option(
     "--bank-order",
-    type=click.Choice(["fixed", "shuffled"]),
+    type=click.Choice(["fixed", "shuffled", "orders"]),
     default="fixed",
     show_default=True,
-    help="With --shortlist all: fixed = one order for every prompt (cacheable prefix, cheaper); shuffled = per item.",
+    help="With --shortlist all: fixed = one alphabetical order (cacheable, but position bias in POC-2); orders = 8 fixed random orders, one per item (bias spread, each order cacheable); shuffled = per item (no caching).",
 )
 @click.option(
     "--shortlist-seed",
@@ -189,6 +203,8 @@ def main(
     shortlist: str,
     bank_order: str,
     max_items: int | None,
+    n_fit: int,
+    n_random: int,
     shortlist_seed: str,
     cap: int,
     workers: int,
@@ -232,11 +248,15 @@ def main(
         prompts = [
             render_insert_prompt(
                 i,
-                whole_bank(
-                    idioms,
-                    None
-                    if bank_order == "fixed"
-                    else (item_rng(seed, i.id, 1) if shortlist_seed == "item" else rng),
+                (
+                    bank_in_order(idioms, bank_order_index(i.id, 1))
+                    if bank_order == "orders"
+                    else whole_bank(
+                        idioms,
+                        None
+                        if bank_order == "fixed"
+                        else (item_rng(seed, i.id, 1) if shortlist_seed == "item" else rng),
+                    )
                 )
                 if shortlist == "all"
                 else mixed_shortlist(
@@ -244,6 +264,8 @@ def main(
                     idioms,
                     retriever,
                     item_rng(seed, i.id, 1) if shortlist_seed == "item" else rng,
+                    n_fit=n_fit,
+                    n_random=n_random,
                 ),
                 template,
             )
@@ -256,7 +278,7 @@ def main(
         mean_chars = sum(map(len, prompts)) / len(prompts)
         click.echo(
             f"dry run: {len(prompts)} prompts for {dataset} (template {template}, "
-            f"{'whole bank' if shortlist == 'all' else f'{N_FIT} fit + {N_RANDOM} random idioms'}), "
+            f"{'whole bank' if shortlist == 'all' else f'{n_fit} fit + {n_random} random idioms'}), "
             f"prompt_hash={p_hash}; mean {mean_chars:.0f} characters "
             f"≈ {mean_chars / _CHARS_PER_TOKEN:.0f} input tokens (estimate); wrote {target / 'dry_run_prompts.jsonl'}"
         )
@@ -315,6 +337,8 @@ def main(
         per_item_seed=shortlist_seed == "item",
         shortlist=shortlist,
         bank_order=bank_order,
+        n_fit=n_fit,
+        n_random=n_random,
     )
     counts = write_outputs(
         target,
@@ -335,7 +359,7 @@ def main(
             "ids_from": [str(p) for p in ids_from],
             "shortlist": f"whole bank ({bank_order} order)"
             if shortlist == "all"
-            else f"{N_FIT} fit + {N_RANDOM} random",
+            else f"{n_fit} fit + {n_random} random",
             "cap": cap,
             "thinking": thinking,
             "temperature": temperature,
