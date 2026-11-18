@@ -132,3 +132,24 @@ def test_majority_vote() -> None:
     assert majority(runs)["k"][1].rejects and majority(runs)["k"][0] == "1"
     runs = [{"k": ("1", bad)}, {"k": ("2", ok)}, {"k": ("3", ok)}]
     assert not majority(runs)["k"][1].rejects
+
+
+def test_siqa_blind_prompt_hides_question_and_checker_shows_it() -> None:
+    from augmentation.checker import render_checker_prompt  # noqa: PLC0415
+    from augmentation.idiom_insertion import insert_label  # noqa: PLC0415
+
+    meta = {
+        "question": "QTEXT How would Sydney feel?",
+        "choices": ["CH-sad", "CH-happy", "CH-bored"],
+    }
+    item = Item("siqa", "s1", "Sydney felt bad afterwards.", "0", meta)
+    blind = render_insert_prompt(item, [_IDIOM], "idiom_insert_v5.txt")
+    assert item.x in blind and "QTEXT" not in blind and "CH-" not in blind
+    assert insert_label(item) == "A) CH-sad"
+    rec = {
+        "dataset": "siqa", "label": "A) CH-sad", "question": meta["question"], "choices": meta["choices"],
+        "original": item.x, "idiomatic": item.x, "literal": item.x, "idiom": "spill the beans",
+        "definition": "reveal", "idiom_text": "x", "literal_text": "y",
+    }  # fmt: skip
+    p = render_checker_prompt(rec, "checker_v1_structured.txt")
+    assert "<question_never_changed>QTEXT" in p and "C) CH-bored" in p and "A) CH-sad" in p

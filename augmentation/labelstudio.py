@@ -307,7 +307,7 @@ def _label_name(dataset: str, y: str, meta: dict[str, Any]) -> str:
         return _SST2_NAMES.get(y, y)
     if dataset == "agnews":
         return _AG_NAMES.get(y, y)
-    if dataset == "mmlu":
+    if dataset in ("mmlu", "siqa"):
         choices = list(meta.get("choices", []))
         idx = int(meta.get("answer_index", y))
         return f"{_LETTERS_V3[idx]}) {choices[idx]}" if idx < len(choices) else y
@@ -345,6 +345,7 @@ def load_v3(out_dir: Path, dataset: str) -> list[dict[str, Any]]:
                 "idiomatic_span": list(rec["idiomatic_span"]),
                 "literal_span": list(rec["literal_span"]),
                 "hypothesis": str(meta.get("hypothesis", "")),
+                "question": str(meta.get("question", "")),
                 "choices": list(meta.get("choices", [])),
                 "answer_index": meta.get("answer_index"),
                 "idiom_id": str(rec["midas_ids"]).split("|")[0],

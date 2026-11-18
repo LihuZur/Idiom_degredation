@@ -103,3 +103,9 @@ class CosmosQaBaseEvaluator(_McContextEvaluator):
 class CosmosQaNoCtxEvaluator(_McContextEvaluator):
     dataset = "cosmosqa_noctx"
     with_context = False
+
+
+# POC-3 extension (2026-11-18): Social IQa pairs from the generator; x = the idiomatic / literal / original story.
+@register_evaluator("siqa_v3poc3")
+class SiqaV3Poc3Evaluator(_McContextEvaluator):
+    dataset = "siqa_v3poc3"

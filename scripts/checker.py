@@ -47,7 +47,7 @@ from augmentation.repair import (
     run_repair,
 )
 
-_DATASETS = ("sst2", "mnli", "mmlu", "agnews")
+_DATASETS = ("sst2", "mnli", "mmlu", "agnews", "siqa")
 _CHARS_PER_TOKEN = 4
 
 
@@ -527,7 +527,13 @@ def _repair_dry_run(
     )
 
 
-_POOL_DIRS = {"sst2": "sst2", "mnli": "mnli_wide", "mmlu": "mmlu_wide", "agnews": "agnews_wide"}
+_POOL_DIRS = {
+    "sst2": "sst2",
+    "mnli": "mnli_wide",
+    "mmlu": "mmlu_wide",
+    "agnews": "agnews_wide",
+    "siqa": "siqa",
+}
 
 
 def label_balance(

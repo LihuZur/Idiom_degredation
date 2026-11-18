@@ -122,6 +122,24 @@ DATASET_TEXT: dict[str, DatasetText] = {
         ),
         example_id="80b240666d04a5b5",
     ),
+    # Social IQa (2026-11-18, MMLU replacement candidate, plan O47): only the blind templates (v3-v5) are meant to
+    # be used; these v1/v2 texts exist so every template has an entry. No dataset example sentence (example_id "").
+    "siqa": DatasetText(
+        note="The text is a short description of an everyday social situation; a question about it and its "
+        "answer choices are never changed.",
+        rule="The correct answer to the question about the situation must stay {label}.",
+        question="Is the correct answer still {label}?",
+        example=(
+            'Text (label: A) sympathetic): "Sydney walked past a homeless woman asking for change but did not '
+            'have any money. Sydney felt bad afterwards."\n'
+            '{"choice": "<id>", "idiomatic": "Sydney walked past a homeless woman asking for change but did not have '
+            'any money. Sydney felt down in the dumps afterwards.", "idiom_text": "down in the dumps", '
+            '"literal_text": "unhappy", "literal": "Sydney walked past a homeless woman asking for change but did not '
+            'have any money. Sydney felt unhappy afterwards.", "check": "answer unchanged; same meaning; natural", '
+            '"verdict": "KEEP"}'
+        ),
+        example_id="",
+    ),
 }
 # v2 rules differ from v1 only for SST-2 (no strength limit: both versions carry the same strength) and
 # MMLU (the idiom may replace words the question turns on; numbers, names, technical terms stay).
@@ -165,7 +183,7 @@ EXAMPLE_IDS = frozenset(t.example_id for t in DATASET_TEXT.values())
 
 def insert_label(item: Item) -> str:
     """The label as the prompt states it; MMLU shows the correct letter with its choice text."""
-    if item.dataset == "mmlu":
+    if item.dataset in ("mmlu", "siqa"):
         choices = list(item.meta.get("choices", []))
         idx = int(item.meta.get("answer_index", item.y))
         return f"{_LETTERS[idx]}) {choices[idx]}" if idx < len(choices) else item.y

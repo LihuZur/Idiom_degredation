@@ -77,5 +77,20 @@ def report(results_dir: Path) -> None:
         click.echo(f"{model:28} " + " ".join(f"{table[model].get(n, '-'):>16}" for n in names))
 
 
+@main.command()
+@click.option("--source", type=click.Choice(sorted(SOURCES)), default="siqa", show_default=True)
+@click.option("--split", default="train", show_default=True)
+@click.option("--out-root", type=click.Path(path_type=Path), default=Path("datasets_out/wide"))
+def pool(source: str, split: str, out_root: Path) -> None:
+    """Write a whole split as a generation pool (`<out-root>/<source>/original.csv`, context = the field to edit)."""
+    rows = normalize(_load_hf(SOURCES[source]["hf"], split), source)
+    path = write_dataset(rows, out_root / source, with_context=True)
+    words = sorted(len(r["context"].split()) for r in rows)
+    click.echo(
+        f"{source}:{split}: {len(rows)} items -> {path}; labels {dict(sorted(Counter(r['label'] for r in rows).items()))}; "
+        f"context words median {words[len(words) // 2]}"
+    )
+
+
 if __name__ == "__main__":
     main()

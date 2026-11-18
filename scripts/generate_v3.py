@@ -51,6 +51,7 @@ _POOLS = {
     "mnli": "mnli_wide",
     "mmlu": "mmlu_wide",
     "agnews": "agnews_wide",
+    "siqa": "siqa",
 }
 _CHARS_PER_TOKEN = 4
 

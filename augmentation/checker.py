@@ -33,6 +33,8 @@ TASK_NOTES = {
     "the fixed choices.",
     "agnews": "Task: the text is a news snippet (title, then description); the label is its topic (World, "
     "Sports, Business or Sci/Tech).",
+    "siqa": "Task: the text describes an everyday social situation; the label is the correct answer to a fixed "
+    "question about it, among fixed answer choices.",
 }
 
 CompleteFn = Callable[[Sequence[str]], list[str | None]]
@@ -49,6 +51,12 @@ def _context(item: dict[str, Any]) -> str:
     if item["dataset"] == "mmlu" and item.get("choices"):
         opts = " ".join(f"{_LETTERS[n]}) {c}" for n, c in enumerate(item["choices"]))
         return f"<answer_choices_never_changed>{opts}</answer_choices_never_changed>\n"
+    if item["dataset"] == "siqa" and item.get("choices"):
+        opts = " ".join(f"{_LETTERS[n]}) {c}" for n, c in enumerate(item["choices"]))
+        return (
+            f"<question_never_changed>{item.get('question', '')}</question_never_changed>\n"
+            f"<answer_choices_never_changed>{opts}</answer_choices_never_changed>\n"
+        )
     return ""
 
 

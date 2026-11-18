@@ -10,6 +10,7 @@ detected from the loaded rows and the run fails loudly if they do not match, ins
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import random
 import re
@@ -53,7 +54,7 @@ def normalize(records: Sequence[Mapping[str, Any]], source: str) -> list[dict[st
     for n, (r, lab) in enumerate(zip(records, raw_labels, strict=True)):
         out.append(
             {
-                "id": str(r.get("id") or f"{source}-{n}"),
+                "id": str(r.get("id") or stable_id(source, r["context"], r["question"], n)),
                 "context": str(r["context"]).strip(),
                 "question": str(r["question"]).strip(),
                 "choices": [str(r[f]).strip() for f in fields],
@@ -61,6 +62,12 @@ def normalize(records: Sequence[Mapping[str, Any]], source: str) -> list[dict[st
             }
         )
     return out
+
+
+def stable_id(source: str, context: Any, question: Any, n: int) -> str:
+    """Datasets without an id column: a short hash of the text (+ row number against exact duplicates)."""
+    h = hashlib.sha1(f"{context}\x1e{question}".encode()).hexdigest()[:12]
+    return f"{source}-{h}-{n}"
 
 
 def sample_balanced(rows: Sequence[dict[str, Any]], n: int, seed: int) -> list[dict[str, Any]]:
