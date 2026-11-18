@@ -88,6 +88,23 @@ def _items_from_logs(items_all: Sequence[Item], folders: Sequence[Path]) -> list
     return [by_id[w] for w in wanted]
 
 
+def _subject_set(subjects: str) -> set[str]:
+    return {x.strip() for x in subjects.split(",") if x.strip()}
+
+
+def _filter_candidates(
+    items_all: Sequence[Item], used: set[str], min_words: int, subjects: set[str]
+) -> list[Item]:
+    """Items not used before, at least `min_words` long, and (MMLU) from the given subjects."""
+    return [
+        i
+        for i in items_all
+        if i.id not in used
+        and len(i.x.split()) >= min_words
+        and (not subjects or str(i.meta.get("subject", "")) in subjects)
+    ]
+
+
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})
 @click.option("--dataset", type=click.Choice(sorted(_POOLS)), required=True)
 @click.option(
@@ -142,6 +159,18 @@ def _items_from_logs(items_all: Sequence[Item], folders: Sequence[Path]) -> list
     default="mixed",
     show_default=True,
     help="mixed: 20 fit + 10 random idioms; all: the whole bank, shuffled per item (plan O41, POC-2).",
+)
+@click.option(
+    "--min-words",
+    type=int,
+    default=0,
+    show_default=True,
+    help="Sample only texts with at least this many words (e.g. long MMLU scenario questions).",
+)
+@click.option(
+    "--subjects",
+    default="",
+    help="MMLU only: comma-separated subjects to sample from (e.g. professional_law,professional_medicine).",
 )
 @click.option(
     "--n-fit", type=int, default=N_FIT, show_default=True, help="Shortlist: idioms by fit."
@@ -203,6 +232,8 @@ def main(
     shortlist: str,
     bank_order: str,
     max_items: int | None,
+    min_words: int,
+    subjects: str,
     n_fit: int,
     n_random: int,
     shortlist_seed: str,
@@ -219,7 +250,7 @@ def main(
     for folder in exclude_from:
         with (folder / "generation_log.csv").open(encoding="utf-8", newline="") as f:
             used |= {row["id"] for row in csv.DictReader(f)}
-    candidates = [i for i in items_all if i.id not in used]
+    candidates = _filter_candidates(items_all, used, min_words, _subject_set(subjects))
     if ids_from:
         items = _items_from_logs(items_all, ids_from)[:max_items]
         n = len(items)
@@ -357,6 +388,8 @@ def main(
             "shortlist_seed": shortlist_seed,
             "excluded_ids_from": [str(p) for p in exclude_from],
             "ids_from": [str(p) for p in ids_from],
+            "min_words": min_words,
+            "subjects": sorted(_subject_set(subjects)),
             "shortlist": f"whole bank ({bank_order} order)"
             if shortlist == "all"
             else f"{n_fit} fit + {n_random} random",
