@@ -32,11 +32,17 @@ NAMES = (
 def _configs(hf_id: str) -> list[str]:
     from datasets import get_dataset_config_names  # noqa: PLC0415
 
-    try:
-        return list(get_dataset_config_names(hf_id))
-    except Exception as exc:
-        click.echo(f"  config names for {hf_id} not available ({exc}); using the default config")
-        return []
+    for revision in (
+        None,
+        "refs/convert/parquet",
+    ):  # script-based datasets list configs only on the parquet branch
+        try:
+            names = list(get_dataset_config_names(hf_id, revision=revision))
+            if names:
+                return names
+        except Exception as exc:
+            click.echo(f"  config names for {hf_id} (revision {revision}) not available ({exc})")
+    return []
 
 
 def _load(hf_id: str, config: str | None, split: str) -> list[dict[str, Any]]:
@@ -55,10 +61,14 @@ def _load(hf_id: str, config: str | None, split: str) -> list[dict[str, Any]]:
 def _split_names(hf_id: str, config: str | None) -> list[str]:
     from datasets import get_dataset_split_names  # noqa: PLC0415
 
-    try:
-        return list(get_dataset_split_names(hf_id, config))
-    except Exception:
-        return ["validation", "train"]
+    for revision in (None, "refs/convert/parquet"):
+        try:
+            names = list(get_dataset_split_names(hf_id, config, revision=revision))
+            if names:
+                return names
+        except Exception:
+            continue
+    return ["validation", "train"]
 
 
 def _round_config(configs: list[str], tag: str) -> str:
@@ -102,29 +112,43 @@ def _prefer_split(hf_id: str, config: str | None) -> str:
 @click.option("--seed", type=int, default=7, show_default=True)
 @click.option("--out-root", type=click.Path(path_type=Path), default=Path("datasets_out"))
 def prepare(n: int, seed: int, out_root: Path) -> None:
-    """Write n balanced positive/negative items per candidate."""
-    configs = _configs(DYNASENT)
-    for tag, name in (("r1", "dynasent_r1_base"), ("r2", "dynasent_r2_base")):
-        config = _round_config(configs, tag)
-        split = _prefer_split(DYNASENT, config)
-        rows = normalize(_load(DYNASENT, config, split), name)
-        _write(rows, n, seed, out_root / name, f"{DYNASENT}:{config}:{split}")
-    bconfigs = _configs(BESSTIE)
-    records: list[dict[str, Any]] = []
-    for config in bconfigs or [None]:
-        records += _load(BESSTIE, config, _prefer_split(BESSTIE, config))
-    rows = normalize(records, "besstie")
-    sources = Counter(r["source"].lower() for r in rows)
-    click.echo(f"besstie source values: {dict(sources)}")
-    groups = {
-        "besstie_google_base": [r for r in rows if "google" in r["source"].lower()],
-        "besstie_reddit_base": [r for r in rows if "reddit" in r["source"].lower()],
-    }
-    if not any(groups.values()):
-        groups = {"besstie_base": rows}
-    for name, part in groups.items():
-        if part:
-            _write(part, n, seed, out_root / name, f"{BESSTIE} ({name})")
+    """Write n balanced positive/negative items per candidate; a failing candidate is reported and skipped."""
+    failures: list[str] = []
+    try:
+        configs = _configs(DYNASENT)
+        for tag, name in (("r1", "dynasent_r1_base"), ("r2", "dynasent_r2_base")):
+            try:
+                config = _round_config(configs, tag)
+                split = _prefer_split(DYNASENT, config)
+                rows = normalize(_load(DYNASENT, config, split), name)
+                _write(rows, n, seed, out_root / name, f"{DYNASENT}:{config}:{split}")
+            except Exception as exc:
+                failures.append(f"{name}: {type(exc).__name__}: {exc}")
+    except Exception as exc:
+        failures.append(f"dynasent: {type(exc).__name__}: {exc}")
+    try:
+        bconfigs = _configs(BESSTIE)
+        records: list[dict[str, Any]] = []
+        for config in bconfigs or [None]:
+            records += _load(BESSTIE, config, _prefer_split(BESSTIE, config))
+        rows = normalize(records, "besstie")
+        sources = Counter(r["source"].lower() for r in rows)
+        click.echo(f"besstie source values: {dict(sources)}")
+        groups = {
+            "besstie_google_base": [r for r in rows if "google" in r["source"].lower()],
+            "besstie_reddit_base": [r for r in rows if "reddit" in r["source"].lower()],
+        }
+        if not any(groups.values()):
+            groups = {"besstie_base": rows}
+        for name, part in groups.items():
+            if part:
+                _write(part, n, seed, out_root / name, f"{BESSTIE} ({name})")
+    except Exception as exc:
+        failures.append(f"besstie: {type(exc).__name__}: {exc}")
+    for f in failures:
+        click.echo(f"FAILED {f}")
+    if len(failures) >= 3:  # noqa: PLR2004 - nothing could be prepared
+        raise click.ClickException("no candidate could be prepared; see the FAILED lines above")
 
 
 def _write(rows: list[dict[str, Any]], n: int, seed: int, out_dir: Path, where: str) -> None:
