@@ -56,3 +56,29 @@ class Sst2Evaluator(BaseEvaluator):
             return self._LABELS["negative"], "ok"
 
         return None, "unparseable"
+
+
+# SST-2-replacement baseline (plan v3 O40, 2026-11-19): candidate sentiment sets, same prompt and parser as SST-2.
+@register_evaluator("dynasent_r1_base")
+class DynaSentR1Evaluator(Sst2Evaluator):
+    dataset = "dynasent_r1_base"
+
+
+@register_evaluator("dynasent_r2_base")
+class DynaSentR2Evaluator(Sst2Evaluator):
+    dataset = "dynasent_r2_base"
+
+
+@register_evaluator("besstie_google_base")
+class BesstieGoogleEvaluator(Sst2Evaluator):
+    dataset = "besstie_google_base"
+
+
+@register_evaluator("besstie_reddit_base")
+class BesstieRedditEvaluator(Sst2Evaluator):
+    dataset = "besstie_reddit_base"
+
+
+@register_evaluator("besstie_base")
+class BesstieEvaluator(Sst2Evaluator):
+    dataset = "besstie_base"
