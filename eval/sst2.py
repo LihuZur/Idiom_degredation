@@ -37,6 +37,9 @@ class Sst2Evaluator(BaseEvaluator):
             meta={"messages": messages, "generate_kwargs": self._gen_kwargs},
         )
 
+    def option_labels(self, ex: AugmentedRow) -> list[tuple[str, str]]:
+        return [("0", "negative"), ("1", "positive")]
+
     def parse(self, raw: str, ex: AugmentedRow) -> tuple[str | None, Literal["ok", "unparseable"]]:
         s = strip_reasoning_trace(raw).strip().lower()
         pos_idx = s.find("positive")

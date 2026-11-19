@@ -134,6 +134,44 @@ class DecoderRunner(Model):
             raise TypeError("Expected apply_chat_template to return a string")
         return prompt
 
+    def score_options(
+        self, batch: list[FormattedInput], options: list[list[str]], chunk: int = 8
+    ) -> list[list[float]]:
+        """Sum of log-probabilities of each option text as the continuation of the item's prompt (plan v3, outcome
+        `p_gold`): the same prompt as `predict`, teacher-forced, no generation. One list of scores per item."""
+        rows: list[
+            tuple[int, list[int], int]
+        ] = []  # (item index, full token ids, number of option tokens)
+        for n, (fi, opts) in enumerate(zip(batch, options, strict=True)):
+            prompt = self._build_prompt(fi)
+            p_ids = self._tokenizer(prompt)["input_ids"]
+            for o in opts:
+                f_ids = self._tokenizer(prompt + o)["input_ids"]
+                k = max(1, len(f_ids) - len(p_ids))
+                rows.append((n, list(f_ids), k))
+        scores: list[list[float]] = [[] for _ in batch]
+        pad = int(self._tokenizer.pad_token_id)
+        for start in range(0, len(rows), chunk):
+            part = rows[start : start + chunk]
+            width = max(len(r[1]) for r in part)
+            ids = torch.tensor(
+                [[pad] * (width - len(r[1])) + r[1] for r in part], device=self.device
+            )
+            mask = torch.tensor(
+                [[0] * (width - len(r[1])) + [1] * len(r[1]) for r in part], device=self.device
+            )
+            with torch.no_grad():
+                logp = torch.log_softmax(
+                    self._model(input_ids=ids, attention_mask=mask).logits.float(), dim=-1
+                )
+            for j, (n, _, k) in enumerate(part):
+                target = ids[j, width - k :]
+                pred = logp[
+                    j, width - k - 1 : width - 1
+                ]  # logits at t predict token t + 1 (left padding)
+                scores[n].append(float(pred.gather(1, target.unsqueeze(1)).sum()))
+        return scores
+
     def predict(self, batch: list[FormattedInput]) -> list[Prediction]:
         if not batch:
             return []

@@ -50,6 +50,9 @@ class MmluEvaluator(BaseEvaluator):
             meta={"messages": messages, "generate_kwargs": self._gen_kwargs},
         )
 
+    def option_labels(self, ex: AugmentedRow) -> list[tuple[str, str]]:
+        return [(str(k), "ABCD"[k]) for k in range(4)]
+
     def parse(self, raw: str, ex: AugmentedRow) -> tuple[str | None, Literal["ok", "unparseable"]]:
         text = strip_reasoning_trace(raw).strip()
         # A letter at the very start wins: "B", "B)", "(B)", "B." or glued to the explanation ("ASocrates ...",

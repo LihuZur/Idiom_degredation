@@ -24,6 +24,9 @@ class MnliEvaluator(BaseEvaluator):
         "contradiction": "2",
     }
 
+    def option_labels(self, ex: AugmentedRow) -> list[tuple[str, str]]:
+        return [(code, word) for word, code in self._LABELS.items()]
+
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self._gen_kwargs = {

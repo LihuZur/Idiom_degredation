@@ -3,6 +3,7 @@
 import abc
 import csv
 import json
+import math
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
@@ -68,9 +69,42 @@ class BaseEvaluator(abc.ABC):
     """Abstract base class for all dataset-specific evaluators (STAGE3_PLAN §3.2)."""
 
     dataset: ClassVar[str]
+    # Set by `scripts/eval.py --score-options`: also score every allowed answer by its log-probability (p_gold).
+    score_options: bool = False
 
     def __init__(self, cfg: EvalConfig) -> None:
         self.cfg = cfg
+
+    def option_labels(self, ex: AugmentedRow) -> list[tuple[str, str]]:
+        """(label code, answer text exactly as the prompt asks for it) for every allowed answer; [] = not scorable."""
+        return []
+
+    def attach_option_scores(
+        self,
+        model: Model,
+        batch: list[FormattedInput],
+        examples: list[AugmentedRow],
+        preds: list[Prediction],
+    ) -> list[Prediction]:
+        labels = [self.option_labels(ex) for ex in examples]
+        scorer = getattr(model, "score_options", None)
+        if scorer is None or not all(labels):
+            return preds
+        scores: list[list[float]] = scorer(batch, [[t for _, t in lab] for lab in labels])
+        out: list[Prediction] = []
+        for pred, ex, lab, sc in zip(preds, examples, labels, scores, strict=True):
+            top = max(sc)
+            probs = [math.exp(v - top) for v in sc]
+            total = sum(probs)
+            codes = [c for c, _ in lab]
+            meta = dict(pred.meta)
+            meta["option_codes"] = codes
+            meta["option_logprobs"] = [round(v, 4) for v in sc]
+            meta["p_gold"] = (
+                round(probs[codes.index(str(ex.y))] / total, 6) if str(ex.y) in codes else None
+            )
+            out.append(replace(pred, meta=meta))
+        return out
 
     @abc.abstractmethod
     def format(self, ex: AugmentedRow) -> FormattedInput:
@@ -153,6 +187,10 @@ class BaseEvaluator(abc.ABC):
                 batch = formatted_inputs[i : i + batch_size]
                 batch_examples = examples[i : i + batch_size]
                 batch_predictions = model.predict(batch)
+                if self.score_options:
+                    batch_predictions = self.attach_option_scores(
+                        model, batch, batch_examples, batch_predictions
+                    )
                 batch_scored = self._score_batch(batch_predictions, batch_examples)
                 scored.extend(batch_scored)
                 if on_new_predictions is not None:

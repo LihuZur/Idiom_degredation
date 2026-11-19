@@ -412,6 +412,9 @@ def _build_per_task(
                 "parse_status": p.meta.get("parse_status", "ok"),
                 "correct": p.meta.get("correct", False),
             }
+            if "p_gold" in p.meta:
+                task_obj[var]["p_gold"] = p.meta["p_gold"]
+                task_obj[var]["option_logprobs"] = p.meta.get("option_logprobs")
         per_task.append(task_obj)
     return per_task
 
@@ -437,6 +440,13 @@ def _build_per_task(
     default=Path("results"),
     type=click.Path(path_type=Path),
     help="Directory to write results JSON to.",
+)
+@click.option(
+    "--score-options",
+    is_flag=True,
+    default=False,
+    help="Also score every allowed answer by log-probability and store p_gold per item (plan v3 outcome; changes "
+    "the config hash, so such runs never mix with plain runs or their checkpoints).",
 )
 @click.option("--seed", default=None, type=int, help="Override seed value in config.")
 @click.option("--limit", default=None, type=int, help="Limit number of rows evaluated per variant.")
@@ -487,6 +497,7 @@ def main(
     dataset: str,
     variants: str | None,
     out_dir: Path,
+    score_options: bool,
     seed: int | None,
     limit: int | None,
     force: bool,
@@ -517,7 +528,10 @@ def main(
 
     resolved_config_dict = cfg.model_dump()
     resolved_config_json = json.dumps(resolved_config_dict, sort_keys=True)
-    config_hash_val = hashlib.sha256(resolved_config_json.encode("utf-8")).hexdigest()[:16]
+    config_hash_val = hashlib.sha256(
+        (resolved_config_json + ("\x1escore_options" if score_options else "")).encode("utf-8")
+    ).hexdigest()[:16]
+    evaluator.score_options = score_options
 
     # Resolve variants to run
     variants_to_run = resolve_variants(dataset, variants)
@@ -584,6 +598,7 @@ def main(
         "device": device_type,
         "config_path": str(config.resolve()),
         "config_hash": config_hash_val,
+        "option_scoring": score_options,
         "resolved_config": resolved_config_dict,
         "prompt_hash": prompt_hash,
         "seed": cfg.seed,

@@ -167,7 +167,11 @@ BLIND_EXAMPLE = (
     'arguing, the two neighbours agreed to make peace and start again.", "check": "same content; same meaning; '
     'natural", "verdict": "KEEP"}'
 )
-BLIND_TEMPLATES = frozenset({"idiom_insert_v3.txt", "idiom_insert_v4.txt", "idiom_insert_v5.txt"})
+BLIND_TEMPLATES = frozenset(
+    {"idiom_insert_v3.txt", "idiom_insert_v4.txt", "idiom_insert_v5.txt", "idiom_insert_v6.txt"}
+)
+# Templates that show fixed related lines (MMLU answer options) without saying what they are or which is right.
+RELATED_LINES_TEMPLATES = frozenset({"idiom_insert_v6.txt"})
 TEXTS_BY_TEMPLATE["idiom_insert_v3.txt"] = {
     ds: replace(t, note="", rule="", question="", example=BLIND_EXAMPLE)
     for ds, t in DATASET_TEXT_V2.items()
@@ -178,6 +182,9 @@ TEXTS_BY_TEMPLATE["idiom_insert_v4.txt"] = TEXTS_BY_TEMPLATE["idiom_insert_v3.tx
 # v5 (2026-11-17, after POC-2): + questions / tasks stay questions (nothing completed, answered or appended), no
 # added true/false or right/wrong judgement, the list order "is random and means nothing" (with --bank-order orders).
 TEXTS_BY_TEMPLATE["idiom_insert_v5.txt"] = TEXTS_BY_TEMPLATE["idiom_insert_v3.txt"]
+# v6 (2026-11-19, MMLU test arm B, plan O47): v5 + the answer options shown as unlabelled "related lines" (no letters,
+# no correct answer), rules against pointing at any of them, against stock openers and register misfits.
+TEXTS_BY_TEMPLATE["idiom_insert_v6.txt"] = TEXTS_BY_TEMPLATE["idiom_insert_v3.txt"]
 EXAMPLE_IDS = frozenset(t.example_id for t in DATASET_TEXT.values())
 
 
@@ -200,6 +207,14 @@ def insert_context(item: Item) -> str:
     return ""
 
 
+def related_lines(item: Item) -> str:
+    """MMLU options as unlabelled lines for the v6 prompt: no letters, no correct answer; empty otherwise."""
+    if item.dataset == "mmlu" and item.meta.get("choices"):
+        lines = "\n".join(f"- {c}" for c in item.meta["choices"])
+        return f"Related lines (they follow the text and are never changed):\n{lines}\n\n"
+    return ""
+
+
 def insert_prompt_hash(dataset: str, template: str = TEMPLATE_FILE) -> str:
     """Cache namespace: template plus this dataset's wording and example."""
     t = TEXTS_BY_TEMPLATE[template][dataset]
@@ -219,7 +234,9 @@ def render_insert_prompt(
         label_question=t.question.format(label=label),
         example=t.example,
         idiom_list="\n".join(lines),
-        context=insert_context(item),
+        context=related_lines(item)
+        if template in RELATED_LINES_TEMPLATES
+        else insert_context(item),
         label=label,
         x=item.x,
     )
@@ -316,6 +333,85 @@ _TAIL_WORDS = 3
 _TOKEN = re.compile(r"[a-z0-9]+|_+")
 
 
+_STOP = frozenset(
+    [
+        "the",
+        "a",
+        "an",
+        "of",
+        "to",
+        "in",
+        "on",
+        "for",
+        "and",
+        "or",
+        "is",
+        "are",
+        "was",
+        "were",
+        "be",
+        "been",
+        "by",
+        "with",
+        "that",
+        "this",
+        "which",
+        "what",
+        "who",
+        "it",
+        "its",
+        "as",
+        "at",
+        "from",
+        "not",
+        "no",
+        "than",
+        "then",
+        "their",
+        "there",
+        "they",
+        "them",
+        "his",
+        "her",
+        "he",
+        "she",
+        "you",
+        "your",
+        "we",
+        "our",
+        "can",
+        "could",
+        "would",
+        "should",
+        "will",
+        "may",
+        "might",
+        "following",
+        "most",
+        "best",
+        "does",
+        "do",
+        "did",
+        "has",
+        "have",
+        "had",
+        "more",
+        "less",
+    ]
+)
+
+
+def _content(text: str) -> set[str]:
+    return {t for t in _TOKEN.findall(text.lower()) if len(t) > 3 and t not in _STOP}  # noqa: PLR2004
+
+
+def option_overlap_gained(original: str, idiomatic: str, options: Sequence[str]) -> bool:
+    """MMLU only (plan O47): True if the idiomatic question shares more content words with some answer option than the
+    original did, the most direct form of an answer hint ("... is moderate", "... which were inaccurate")."""
+    o, i = _content(original), _content(idiomatic)
+    return any(len(i & _content(opt)) > len(o & _content(opt)) for opt in options)
+
+
 def question_tail_changed(original: str, idiomatic: str) -> bool:
     """MMLU only (plan O47): the question's last words must still end the idiomatic text and a blank must stay;
     catches questions turned into answered statements ("... is:" -> "... is a happy medium.")."""
@@ -325,7 +421,12 @@ def question_tail_changed(original: str, idiomatic: str) -> bool:
 
 
 def validate_insert(
-    raw: str, x: str, shortlist_ids: set[str], index: IdiomIndex, dataset: str = ""
+    raw: str,
+    x: str,
+    shortlist_ids: set[str],
+    index: IdiomIndex,
+    dataset: str = "",
+    options: Sequence[str] = (),
 ) -> Inserted:
     """Parse the reply and run every check code can do; the first failure wins (plan v3 §2.3)."""
     obj = extract_json(raw)
@@ -346,6 +447,10 @@ def validate_insert(
         (
             "question_tail_changed",
             lambda: dataset == "mmlu" and question_tail_changed(x, idiomatic),
+        ),
+        (
+            "option_overlap_gained",
+            lambda: dataset == "mmlu" and option_overlap_gained(x, idiomatic, options),
         ),
         ("idiom_text_not_unique", lambda: idiomatic.count(idiom_text) != 1),
         ("literal_same_as_idiom", lambda: literal_text == idiom_text),
@@ -481,7 +586,14 @@ def generate_insert(
         failed: list[Item] = []
         for item, short, raw in zip(todo, lists, complete(prompts), strict=True):
             p = (
-                validate_insert(raw, item.x, {i.idiom_id for i in short}, index, item.dataset)
+                validate_insert(
+                    raw,
+                    item.x,
+                    {i.idiom_id for i in short},
+                    index,
+                    item.dataset,
+                    [str(c) for c in item.meta.get("choices", [])],
+                )
                 if raw is not None
                 else Inserted(False, "no_reply")
             )

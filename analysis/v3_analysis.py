@@ -72,6 +72,7 @@ def load_long(
                         },
                         "version": version,
                         "correct": int(bool(task[key]["correct"])),
+                        "p_gold": task[key].get("p_gold"),
                         "parse_ok": task[key].get("parse_status") == "ok",
                     }
                 )
@@ -211,6 +212,37 @@ def per_model(df: pd.DataFrame, *, n_boot: int = 5000, seed: int = 0) -> pd.Data
             }
         )
     return pd.DataFrame(out)
+
+
+def prob_table(df: pd.DataFrame, *, n_boot: int = 5000, seed: int = 0) -> pd.DataFrame:
+    """Per dataset: mean probability of the correct answer (p_gold) on the literal and idiomatic versions, the paired
+    difference per item (mean over models), a bootstrap interval over items, the item SD, and the items needed to
+    detect the observed difference (80% power, alpha 0.0125). Requires runs with `--score-options`."""
+    rng = np.random.default_rng(seed)
+    rows: list[dict[str, Any]] = []
+    d = pd.DataFrame(df[df["version"].isin(["idiomatic", "literal"]) & df["p_gold"].notna()]).copy()
+    for ds, g in d.groupby("dataset"):
+        w = g.pivot_table(index="item", columns="version", values="p_gold", aggfunc="mean")
+        gap = (w["idiomatic"] - w["literal"]).to_numpy(float) * 100
+        boots = np.array([rng.choice(gap, len(gap)).mean() for _ in range(n_boot)])
+        sd = float(np.std(gap, ddof=1))
+        mean = float(np.mean(gap))
+        z = 2.50 + 0.84
+        rows.append(
+            {
+                "dataset": str(ds),
+                "n_items": len(gap),
+                "n_models": len(set(g["model"].tolist())),
+                "p_gold_literal": round(float(np.mean(w["literal"])) * 100, 2),
+                "p_gold_idiomatic": round(float(np.mean(w["idiomatic"])) * 100, 2),
+                "diff_pp": round(mean, 3),
+                "ci_low": round(float(np.percentile(boots, 2.5)), 3),
+                "ci_high": round(float(np.percentile(boots, 97.5)), 3),
+                "item_sd_pp": round(sd, 3),
+                "items_needed_for_observed": round((z * sd / abs(mean)) ** 2) if mean else None,
+            }
+        )
+    return pd.DataFrame(rows)
 
 
 SECONDARY_TERMS = ("task", "model_size", "familiarity", "opacity", "log_freq")

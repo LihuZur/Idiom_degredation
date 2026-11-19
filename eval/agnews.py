@@ -43,6 +43,9 @@ class AgNewsEvaluator(BaseEvaluator):
         "sci/tech": "3",
     }
 
+    def option_labels(self, ex: AugmentedRow) -> list[tuple[str, str]]:
+        return [("0", "World"), ("1", "Sports"), ("2", "Business"), ("3", "Sci/Tech")]
+
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self._gen_kwargs = {

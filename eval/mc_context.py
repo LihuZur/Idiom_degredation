@@ -78,6 +78,12 @@ class _McContextEvaluator(BaseEvaluator):
             id=ex.id, prompt="", meta={"messages": messages, "generate_kwargs": self._gen_kwargs}
         )
 
+    def option_labels(self, ex: AugmentedRow) -> list[tuple[str, str]]:
+        return [
+            (str(k), letters_for(len(ex.meta["choices"]))[k])
+            for k in range(len(ex.meta["choices"]))
+        ]
+
     def parse(self, raw: str, ex: AugmentedRow) -> tuple[str | None, Literal["ok", "unparseable"]]:
         idx = parse_letter(raw, len(ex.meta["choices"]))
         return (idx, "ok") if idx is not None else (None, "unparseable")

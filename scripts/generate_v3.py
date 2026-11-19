@@ -133,6 +133,7 @@ def _filter_candidates(
             "idiom_insert_v3.txt",
             "idiom_insert_v4.txt",
             "idiom_insert_v5.txt",
+            "idiom_insert_v6.txt",
         ]
     ),
     default=TEMPLATE_FILE,

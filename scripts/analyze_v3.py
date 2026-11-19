@@ -17,6 +17,7 @@ from analysis.v3_analysis import (
     holm,
     load_long,
     per_model,
+    prob_table,
 )
 
 
@@ -88,6 +89,10 @@ def main(
     sec.to_csv(out_dir / "secondary.csv", index=False)
     pm = per_model(df, n_boot=n_boot)
     pm.to_csv(out_dir / "per_model.csv", index=False)
+    has_probs = bool(df["p_gold"].notna().to_numpy().any())
+    probs = prob_table(df, n_boot=n_boot) if has_probs else pd.DataFrame()
+    if not probs.empty:
+        probs.to_csv(out_dir / "p_gold.csv", index=False)
     with pd.option_context("display.width", 200, "display.max_columns", 20):
         click.echo(
             "== main test (per task)\n" + main_df.drop(columns=["estimator"]).to_string(index=False)
@@ -100,6 +105,11 @@ def main(
         )
         click.echo("\n== secondary questions (exploratory)\n" + sec.to_string(index=False))
         click.echo("\n== per-model check\n" + pm.to_string(index=False))
+        if not probs.empty:
+            click.echo(
+                "\n== probability of the correct answer (p_gold, --score-options runs)\n"
+                + probs.to_string(index=False)
+            )
     click.echo(f"\ntables -> {out_dir}")
 
 

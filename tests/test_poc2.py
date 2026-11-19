@@ -153,3 +153,21 @@ def test_siqa_blind_prompt_hides_question_and_checker_shows_it() -> None:
     }  # fmt: skip
     p = render_checker_prompt(rec, "checker_v1_structured.txt")
     assert "<question_never_changed>QTEXT" in p and "C) CH-bored" in p and "A) CH-sad" in p
+
+
+def test_v6_shows_options_unlabelled_and_overlap_check() -> None:
+    from augmentation.idiom_insertion import option_overlap_gained  # noqa: PLC0415
+
+    v6 = render_insert_prompt(_mmlu(), [_IDIOM], "idiom_insert_v6.txt")
+    tail = v6.split("Idioms (id")[1]
+    assert "Related lines" in tail and "- CHOICE-C" in tail
+    assert "C)" not in tail and "label" not in v6.lower() and "answer" not in tail.lower()
+    assert "stock opening phrase" in v6 and "Match the register" in v6
+    q = "attitude change is greatest when the level of discrepancy is:"
+    opts = ["small.", "moderate.", "large.", "unpredictable."]
+    assert option_overlap_gained(
+        q, "attitude change is greatest when the level of discrepancy is moderate:", opts
+    )
+    assert not option_overlap_gained(
+        q, "in a nutshell, attitude change is greatest when the level of discrepancy is:", opts
+    )
