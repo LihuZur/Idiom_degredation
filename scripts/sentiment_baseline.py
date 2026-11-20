@@ -111,8 +111,27 @@ def _prefer_split(hf_id: str, config: str | None) -> str:
 @click.option("--n", type=int, default=200, show_default=True)
 @click.option("--seed", type=int, default=7, show_default=True)
 @click.option("--out-root", type=click.Path(path_type=Path), default=Path("datasets_out"))
-def prepare(n: int, seed: int, out_root: Path) -> None:
+@click.option(
+    "--only",
+    type=click.Choice(["all", "dynasent", "besstie"]),
+    default="all",
+    show_default=True,
+    help="Prepare one source only (keeps an already-evaluated sample of the other untouched).",
+)
+def prepare(n: int, seed: int, out_root: Path, only: str) -> None:
     """Write n balanced positive/negative items per candidate; a failing candidate is reported and skipped."""
+    failures: list[str] = []
+    if only != "besstie":
+        failures += _prepare_dynasent(n, seed, out_root)
+    if only != "dynasent":
+        failures += _prepare_besstie(n, seed, out_root)
+    for f in failures:
+        click.echo(f"FAILED {f}")
+    if failures and len(failures) >= {"all": 3, "dynasent": 2, "besstie": 1}[only]:
+        raise click.ClickException("nothing could be prepared; see the FAILED lines above")
+
+
+def _prepare_dynasent(n: int, seed: int, out_root: Path) -> list[str]:
     failures: list[str] = []
     try:
         configs = _configs(DYNASENT)
@@ -126,6 +145,11 @@ def prepare(n: int, seed: int, out_root: Path) -> None:
                 failures.append(f"{name}: {type(exc).__name__}: {exc}")
     except Exception as exc:
         failures.append(f"dynasent: {type(exc).__name__}: {exc}")
+    return failures
+
+
+def _prepare_besstie(n: int, seed: int, out_root: Path) -> list[str]:
+    failures: list[str] = []
     try:
         bconfigs = _configs(BESSTIE)
         records: list[dict[str, Any]] = []
@@ -145,10 +169,7 @@ def prepare(n: int, seed: int, out_root: Path) -> None:
                 _write(part, n, seed, out_root / name, f"{BESSTIE} ({name})")
     except Exception as exc:
         failures.append(f"besstie: {type(exc).__name__}: {exc}")
-    for f in failures:
-        click.echo(f"FAILED {f}")
-    if len(failures) >= 3:  # noqa: PLR2004 - nothing could be prepared
-        raise click.ClickException("no candidate could be prepared; see the FAILED lines above")
+    return failures
 
 
 def _write(rows: list[dict[str, Any]], n: int, seed: int, out_dir: Path, where: str) -> None:
