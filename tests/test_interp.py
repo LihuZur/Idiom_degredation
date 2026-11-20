@@ -8,6 +8,7 @@ from analysis.interp import (
     group_of,
     item_rows,
     layer_means,
+    pooled_flip_test,
     summarize,
 )
 from models.decoder_runner import span_token_indices
@@ -74,3 +75,26 @@ def test_centering_removes_shared_direction():
     (row,) = item_rows({}, last, None, None, center, None)
     assert float(str(row["d_il_raw"])) < 0.001  # raw: almost identical
     assert float(str(row["d_il"])) > 1.5  # centred: opposite directions
+
+
+def test_pooled_flip_test_detects_far_flips():
+    rows = []
+    for k in range(12):
+        g = "idiom_only_wrong" if k < 3 else ("literal_only_wrong" if k < 5 else "both_right")
+        far = 10.0 if g == "idiom_only_wrong" else 1.0
+        for layer in range(4):
+            rows.append(
+                {
+                    "model": "m",
+                    "task": "t",
+                    "id": str(k),
+                    "group": g,
+                    "depth": layer / 3,
+                    "d_il": far,
+                }
+            )
+    res = pooled_flip_test(pd.DataFrame(rows), n_perm=500)
+    idi = res[(res["flip"] == "idiom_only_wrong") & (res["task"] == "all")]
+    lit = res[(res["flip"] == "literal_only_wrong") & (res["task"] == "all")]
+    assert (idi["rel_flip"] > idi["rel_both_right"]).all() and (idi["p_perm"] < 0.05).all()
+    assert (lit["p_perm"] > 0.05).all()

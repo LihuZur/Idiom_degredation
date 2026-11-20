@@ -20,7 +20,14 @@ import yaml
 
 import eval as eval_package  # pyright: ignore[reportUnusedImport]  # noqa: F401  (registers evaluators)
 import models as models_package  # pyright: ignore[reportUnusedImport]  # noqa: F401
-from analysis.interp import depth_bins, group_of, item_rows, layer_means, summarize
+from analysis.interp import (
+    depth_bins,
+    group_of,
+    item_rows,
+    layer_means,
+    pooled_flip_test,
+    summarize,
+)
 from eval.config import EvalConfig
 from eval.registry import get_evaluator
 from models.decoder_runner import DecoderRunner
@@ -174,6 +181,15 @@ def summary(out_dir: Path) -> None:
         "display.width", 200, "display.max_rows", 500, "display.float_format", "{:.4f}".format
     ):
         click.echo(d.to_string(index=False))
+    pooled = pooled_flip_test(df)
+    pooled.to_csv(out_dir / "pooled_flip_test.csv", index=False)
+    with pd.option_context(
+        "display.width", 200, "display.max_rows", 200, "display.float_format", "{:.3f}".format
+    ):
+        click.echo(
+            "\npooled over models: relative d_il (1 = typical item), flipped items vs items right in both"
+        )
+        click.echo(pooled.to_string(index=False))
     groups = df[df["layer"] == 0].groupby(["model", "task", "group"]).size().unstack(fill_value=0)
     click.echo(f"\nitems per group (idiom_only_wrong = literal right, idiomatic wrong):\n{groups}")
 

@@ -92,14 +92,15 @@ def summarize(df: pd.DataFrame) -> pd.DataFrame:
     for keys, g in df.groupby(["model", "task", "layer"], sort=True):
         model, task, layer = cast(tuple[Any, Any, Any], keys)
         flip = g[g["group"] == "idiom_only_wrong"]["d_il"]
+        back = g[g["group"] == "literal_only_wrong"]["d_il"]
         stable = g[g["group"] == "both_right"]["d_il"]
-        drop = g["pg_lit"] - g["pg_idi"]
+        drop = (g["pg_lit"] - g["pg_idi"]).astype(float)
         ok = drop.notna()
-        rho = (
-            float(g.loc[ok, "d_il"].astype(float).corr(drop[ok].astype(float), method="spearman"))
-            if ok.sum() >= _MIN_FOR_RHO
-            else np.nan
-        )
+        enough = ok.sum() >= _MIN_FOR_RHO
+        d_il = g.loc[ok, "d_il"].astype(float)
+        rho = float(d_il.corr(drop[ok], method="spearman")) if enough else np.nan
+        # a distance has no sign, so it can only predict the size of the p_gold change, not its direction
+        rho_abs = float(d_il.corr(drop[ok].abs(), method="spearman")) if enough else np.nan
         out.append(
             {
                 "model": model,
@@ -117,7 +118,10 @@ def summarize(df: pd.DataFrame) -> pd.DataFrame:
                 "n_idiom_only_wrong": len(flip),
                 "d_il_idiom_only_wrong": flip.mean() if len(flip) else np.nan,
                 "d_il_both_right": stable.mean() if len(stable) else np.nan,
+                "n_literal_only_wrong": len(back),
+                "d_il_literal_only_wrong": back.mean() if len(back) else np.nan,
                 "rho_d_il_vs_pgold_drop": rho,
+                "rho_d_il_vs_abs_pgold_change": rho_abs,
             }
         )
     return pd.DataFrame(out)
@@ -138,9 +142,71 @@ def depth_bins(
         "d_span",
         "d_il_idiom_only_wrong",
         "d_il_both_right",
-        "rho_d_il_vs_pgold_drop",
+        "d_il_literal_only_wrong",
+        "rho_d_il_vs_abs_pgold_change",
     ]
     means = cast(
         pd.DataFrame, s.groupby(["model", "task", "depth_bin"], observed=True)[cols].mean()
     )
     return means.reset_index()
+
+
+DEPTH_LABELS = ("0-25%", "25-50%", "50-75%", "75-100%")
+
+
+def item_depth_means(df: pd.DataFrame) -> pd.DataFrame:
+    """Per item: mean d_il within each relative-depth quarter, divided by the median over all items of the same model,
+    task and quarter (models differ in their distance scale; 1.0 = a typical item of that model)."""
+    d = df.copy()
+    d["depth_bin"] = pd.cut(
+        d["depth"], [0, 0.25, 0.5, 0.75, 1.0001], right=False, labels=list(DEPTH_LABELS)
+    )
+    keys = ["model", "task", "id", "group", "depth_bin"]
+    items = cast(pd.DataFrame, d.groupby(keys, observed=True)["d_il"].mean()).reset_index()
+    med = items.groupby(["model", "task", "depth_bin"], observed=True)["d_il"].transform("median")
+    items["rel"] = items["d_il"] / med
+    return items
+
+
+def pooled_flip_test(df: pd.DataFrame, n_perm: int = 5000, seed: int = 0) -> pd.DataFrame:
+    """Items whose answer flipped vs items right in both versions, pooled over models: mean relative d_il of each
+    group, and a permutation p-value (group labels shuffled within each model and task, so every model keeps its own
+    number of flips). Run for both flip directions: if literal-only-wrong items are as far apart as idiom-only-wrong
+    items, the distance only says that the answer changed, not that the idiom caused anything special."""
+    rng = np.random.default_rng(seed)
+    items = item_depth_means(df)
+    out: list[dict[str, object]] = []
+    for flip in ("idiom_only_wrong", "literal_only_wrong"):
+        for task in [*sorted(items["task"].unique()), "all"]:
+            for depth in DEPTH_LABELS:
+                sel = items[
+                    (items["depth_bin"] == depth) & items["group"].isin([flip, "both_right"])
+                ]
+                if task != "all":
+                    sel = sel[sel["task"] == task]
+                is_flip = np.asarray(sel["group"] == flip, dtype=bool)
+                if is_flip.sum() == 0 or (~is_flip).sum() == 0:
+                    continue
+                rel = np.asarray(sel["rel"], dtype=float)
+                cells = np.asarray(sel["model"].astype(str) + "|" + sel["task"].astype(str))
+                observed = rel[is_flip].mean() - rel[~is_flip].mean()
+                perm = np.empty(n_perm)
+                groups = [np.flatnonzero(cells == c) for c in np.unique(cells)]
+                for k in range(n_perm):
+                    lab = is_flip.copy()
+                    for idx in groups:
+                        lab[idx] = rng.permutation(lab[idx])
+                    perm[k] = rel[lab].mean() - rel[~lab].mean()
+                out.append(
+                    {
+                        "flip": flip,
+                        "task": task,
+                        "depth_bin": depth,
+                        "n_flip": int(is_flip.sum()),
+                        "n_both_right": int((~is_flip).sum()),
+                        "rel_flip": rel[is_flip].mean(),
+                        "rel_both_right": rel[~is_flip].mean(),
+                        "p_perm": float((np.abs(perm) >= abs(observed)).mean()),
+                    }
+                )
+    return pd.DataFrame(out)
