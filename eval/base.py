@@ -120,6 +120,10 @@ class BaseEvaluator(abc.ABC):
         """Score the parsed output against the canonical label."""
         return parsed is not None and str(parsed) == str(y)
 
+    def load_rows(self, variant_csv: Path, limit: int | None = None) -> list[AugmentedRow]:
+        """Public access to the rows of a variant CSV (used by the interpretability pilot)."""
+        return self._load_rows(variant_csv, limit)
+
     def _load_rows(self, variant_csv: Path, limit: int | None) -> list[AugmentedRow]:
         """Load augmented rows from CSV."""
         with variant_csv.open(encoding="utf-8") as f:

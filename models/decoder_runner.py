@@ -12,6 +12,11 @@ from models.device import select_device
 logger = logging.getLogger(__name__)
 
 
+def span_token_indices(offsets: list[tuple[int, int]], lo: int, hi: int) -> list[int]:
+    """Indices of tokens whose character range overlaps [lo, hi) (special tokens have empty ranges and are skipped)."""
+    return [n for n, (a, b) in enumerate(offsets) if b > a and a < hi and b > lo]
+
+
 class DecoderRunner(Model):
     """Low-level transformers runner for instruction-tuned decoder models."""
 
@@ -171,6 +176,34 @@ class DecoderRunner(Model):
                 ]  # logits at t predict token t + 1 (left padding)
                 scores[n].append(float(pred.gather(1, target.unsqueeze(1)).sum()))
         return scores
+
+    def hidden_states(
+        self, fi: FormattedInput, text: str, span: tuple[int, int] | None
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        """Interpretability pilot (plan v3 F1): the residual stream of every layer for the item's prompt (the same
+        prompt as `predict`), one item, no padding. Returns (last prompt token [layers + 1, hidden],
+        mean over the tokens of `span` [layers + 1, hidden] or None). `span` is a character span inside `text`, and
+        `text` must appear verbatim in the prompt; otherwise the span result is None."""
+        prompt = self._build_prompt(fi)
+        try:
+            enc = self._tokenizer(prompt, return_tensors="pt", return_offsets_mapping=True)
+            offsets = [tuple(o) for o in enc.pop("offset_mapping")[0].tolist()]
+        except NotImplementedError:  # slow tokenizers have no offsets: last token only
+            enc = self._tokenizer(prompt, return_tensors="pt")
+            offsets, span = [], None
+        enc = {k: v.to(self.device) for k, v in enc.items()}
+        with torch.no_grad():
+            out = self._model(**enc, output_hidden_states=True)
+        states = (
+            torch.stack([h[0] for h in out.hidden_states]).float().cpu()
+        )  # [layers + 1, tokens, hidden]
+        pooled = None
+        start = prompt.find(text) if span is not None else -1
+        if span is not None and start >= 0:
+            idx = span_token_indices(offsets, start + span[0], start + span[1])
+            if idx:
+                pooled = states[:, idx, :].mean(dim=1)
+        return states[:, -1, :], pooled
 
     def predict(self, batch: list[FormattedInput]) -> list[Prediction]:
         if not batch:
