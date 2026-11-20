@@ -168,6 +168,26 @@ def item_depth_means(df: pd.DataFrame) -> pd.DataFrame:
     return items
 
 
+def perm_diff_p(
+    values: np.ndarray,
+    in_group: np.ndarray,
+    cells: np.ndarray,
+    n_perm: int,
+    rng: np.random.Generator,
+) -> float:
+    """Two-sided permutation p-value for mean(values[in_group]) - mean(values[~in_group]); the group labels are
+    shuffled within each cell (model x task), so every cell keeps its own group sizes."""
+    observed = values[in_group].mean() - values[~in_group].mean()
+    blocks = [np.flatnonzero(cells == c) for c in np.unique(cells)]
+    perm = np.empty(n_perm)
+    for k in range(n_perm):
+        lab = in_group.copy()
+        for idx in blocks:
+            lab[idx] = rng.permutation(lab[idx])
+        perm[k] = values[lab].mean() - values[~lab].mean()
+    return float((np.abs(perm) >= abs(observed) - 1e-12).mean())
+
+
 def pooled_flip_test(df: pd.DataFrame, n_perm: int = 5000, seed: int = 0) -> pd.DataFrame:
     """Items whose answer flipped vs items right in both versions, pooled over models: mean relative d_il of each
     group, and a permutation p-value (group labels shuffled within each model and task, so every model keeps its own
@@ -189,14 +209,7 @@ def pooled_flip_test(df: pd.DataFrame, n_perm: int = 5000, seed: int = 0) -> pd.
                     continue
                 rel = np.asarray(sel["rel"], dtype=float)
                 cells = np.asarray(sel["model"].astype(str) + "|" + sel["task"].astype(str))
-                observed = rel[is_flip].mean() - rel[~is_flip].mean()
-                perm = np.empty(n_perm)
-                groups = [np.flatnonzero(cells == c) for c in np.unique(cells)]
-                for k in range(n_perm):
-                    lab = is_flip.copy()
-                    for idx in groups:
-                        lab[idx] = rng.permutation(lab[idx])
-                    perm[k] = rel[lab].mean() - rel[~lab].mean()
+                p_value = perm_diff_p(rel, is_flip, cells, n_perm, rng)
                 out.append(
                     {
                         "flip": flip,
@@ -206,7 +219,7 @@ def pooled_flip_test(df: pd.DataFrame, n_perm: int = 5000, seed: int = 0) -> pd.
                         "n_both_right": int((~is_flip).sum()),
                         "rel_flip": rel[is_flip].mean(),
                         "rel_both_right": rel[~is_flip].mean(),
-                        "p_perm": float((np.abs(perm) >= abs(observed)).mean()),
+                        "p_perm": p_value,
                     }
                 )
     return pd.DataFrame(out)

@@ -177,6 +177,26 @@ class DecoderRunner(Model):
                 scores[n].append(float(pred.gather(1, target.unsqueeze(1)).sum()))
         return scores
 
+    def prompt_text(self, fi: FormattedInput) -> str:
+        """The exact prompt string `predict` feeds the model (chat template applied)."""
+        return self._build_prompt(fi)
+
+    def residual_at(self, text: str, lo: int, hi: int) -> torch.Tensor | None:
+        """Residual stream of every layer [layers + 1, hidden] at the last token overlapping characters [lo, hi) of
+        `text` (fed as is, no template added). None if no token overlaps the span or the tokenizer has no offsets."""
+        try:
+            enc = self._tokenizer(text, return_tensors="pt", return_offsets_mapping=True)
+        except NotImplementedError:
+            return None
+        offsets = [tuple(o) for o in enc.pop("offset_mapping")[0].tolist()]
+        idx = span_token_indices(offsets, lo, hi)
+        if not idx:
+            return None
+        enc = {k: v.to(self.device) for k, v in enc.items()}
+        with torch.no_grad():
+            out = self._model(**enc, output_hidden_states=True)
+        return torch.stack([h[0, idx[-1]] for h in out.hidden_states]).float().cpu()
+
     def hidden_states(
         self, fi: FormattedInput, text: str, span: tuple[int, int] | None
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
