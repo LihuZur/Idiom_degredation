@@ -89,6 +89,75 @@ def _items_from_logs(items_all: Sequence[Item], folders: Sequence[Path]) -> list
     return [by_id[w] for w in wanted]
 
 
+def earlier_runs(root: Path, dataset: str, own: Path) -> list[Path]:
+    """Folders `<dataset>` or `<dataset>_*` holding a generation_log.csv anywhere under `root`, except `own`."""
+    return sorted(
+        f.parent
+        for f in root.glob("**/generation_log.csv")
+        if (f.parent.name == dataset or f.parent.name.startswith(f"{dataset}_"))
+        and f.parent.resolve() != own.resolve()
+    )
+
+
+def _draw(
+    items_all: Sequence[Item],
+    candidates: Sequence[Item],
+    ids_from: Sequence[Path],
+    max_items: int | None,
+    n: int,
+    seed: int,
+    *,
+    equal_labels: bool,
+) -> list[Item]:
+    """The items to generate for: re-run earlier ids, or a fresh stratified (or equal-label) draw."""
+    if ids_from:
+        return _items_from_logs(items_all, ids_from)[:max_items]
+    items = (
+        equal_label_sample(candidates, n, seed)
+        if equal_labels
+        else stratified_sample(candidates, n, seed)
+    )
+    if (
+        len(items) < n and not equal_labels
+    ):  # per-stratum rounding can fall short; top up deterministically
+        picked = {i.id for i in items}
+        rest = [i for i in candidates if i.id not in picked]
+        random.Random(seed).shuffle(rest)
+        items += rest[: n - len(items)]
+    return items
+
+
+def equal_label_sample(candidates: Sequence[Item], n: int, seed: int) -> list[Item]:
+    """n items split evenly over labels; within a label, stratified by length (`stratified_sample`)."""
+    labels = sorted({i.y for i in candidates})
+    out: list[Item] = []
+    for k, lab in enumerate(labels):
+        want = n // len(labels) + (k < n % len(labels))
+        group = [i for i in candidates if i.y == lab]
+        got = stratified_sample(group, want, seed)
+        if len(got) < want:  # per-stratum rounding can fall short; top up within the label
+            picked = {i.id for i in got}
+            rest = [i for i in group if i.id not in picked]
+            random.Random(seed).shuffle(rest)
+            got += rest[: want - len(got)]
+        out += got
+    random.Random(seed).shuffle(out)
+    return out
+
+
+def prior_usage(folders: Sequence[Path]) -> Counter[str]:
+    """Uses per idiom id (first MIDAS id, as in the shortlists) in the idiomatic.csv of earlier output folders."""
+    usage: Counter[str] = Counter()
+    for folder in folders:
+        path = folder / "idiomatic.csv"
+        if not path.exists():
+            continue
+        with path.open(encoding="utf-8", newline="") as f:
+            for row in csv.DictReader(f):
+                usage[str(json.loads(row["meta"])["idiom"]["midas_ids"]).split("|")[0]] += 1
+    return usage
+
+
 def _subject_set(subjects: str) -> set[str]:
     return {x.strip() for x in subjects.split(",") if x.strip()}
 
@@ -116,6 +185,12 @@ def _filter_candidates(
     help="Sentences to sample (stratified by label x length).",
 )
 @click.option("--seed", type=int, default=0, show_default=True)
+@click.option(
+    "--equal-labels",
+    is_flag=True,
+    help="Draw the same number of items per label (each label stratified by length) instead of pool shares "
+    "(full study, plan O53: the final set has equal labels).",
+)
 @click.option(
     "--mode", type=click.Choice(["dry-run", "sync", "batch"]), default="dry-run", show_default=True
 )
@@ -146,6 +221,12 @@ def _filter_candidates(
     multiple=True,
     type=click.Path(exists=True, file_okay=False, path_type=Path),
     help="Earlier output folder(s) of this dataset; their item ids are not sampled again (repeatable).",
+)
+@click.option(
+    "--exclude-all-earlier",
+    is_flag=True,
+    help="Also exclude every item attempted by any earlier run of this dataset: all <dataset>/ or <dataset>_*/ "
+    "folders with a generation_log.csv under datasets_out/ (full study, plan O53 b); the list is recorded.",
 )
 @click.option(
     "--ids-from",
@@ -202,6 +283,20 @@ def _filter_candidates(
     "run: one sequence for the whole run (how E1/E2 were made).",
 )
 @click.option("--cap", type=int, default=15, show_default=True, help="Max kept rows per idiom.")
+@click.option(
+    "--chunk",
+    type=int,
+    default=None,
+    help="Send items in groups of this size and stop showing idioms that reached --cap to later groups "
+    "(full study, plan O53: --cap 5 --chunk 100). Default: all items at once (POC runs).",
+)
+@click.option(
+    "--usage-from",
+    "usage_from",
+    multiple=True,
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    help="Earlier output folder(s) of the same study and dataset: their idioms count towards --cap (top-up runs).",
+)
 @click.option("--workers", type=int, default=8, show_default=True)
 @click.option(
     "--pools", type=click.Path(path_type=Path), default=Path("datasets_out/wide"), show_default=True
@@ -222,6 +317,7 @@ def main(
     dataset: str,
     n: int,
     seed: int,
+    equal_labels: bool,
     mode: str,
     provider: str,
     model: str,
@@ -230,6 +326,7 @@ def main(
     max_output_tokens: int,
     template: str,
     exclude_from: tuple[Path, ...],
+    exclude_all_earlier: bool,
     ids_from: tuple[Path, ...],
     shortlist: str,
     bank_order: str,
@@ -240,6 +337,8 @@ def main(
     n_random: int,
     shortlist_seed: str,
     cap: int,
+    chunk: int | None,
+    usage_from: tuple[Path, ...],
     workers: int,
     pools: Path,
     out_dir: Path,
@@ -249,20 +348,17 @@ def main(
     pool_csv = pools / _POOLS[dataset] / "original.csv"
     items_all, pool_rows = load_pool(pool_csv, dataset)
     used = set(EXAMPLE_IDS)
+    if exclude_all_earlier:
+        exclude_from = (
+            *exclude_from,
+            *earlier_runs(Path("datasets_out"), dataset, out_dir / dataset),
+        )
     for folder in exclude_from:
         with (folder / "generation_log.csv").open(encoding="utf-8", newline="") as f:
             used |= {row["id"] for row in csv.DictReader(f)}
     candidates = _filter_candidates(items_all, used, min_words, _subject_set(subjects))
-    if ids_from:
-        items = _items_from_logs(items_all, ids_from)[:max_items]
-        n = len(items)
-    else:
-        items = stratified_sample(candidates, n, seed)
-    if len(items) < n:  # per-stratum rounding can fall short; top up deterministically
-        picked = {i.id for i in items}
-        rest = [i for i in candidates if i.id not in picked]
-        random.Random(seed).shuffle(rest)
-        items += rest[: n - len(items)]
+    items = _draw(items_all, candidates, ids_from, max_items, n, seed, equal_labels=equal_labels)
+    n = len(items) if ids_from else n
     idioms, inv_rows = load_inventory(
         DEFAULT_FINAL_PATH,
         impli_csv=_INV / "impli_gloss_seed.csv",
@@ -372,6 +468,8 @@ def main(
         bank_order=bank_order,
         n_fit=n_fit,
         n_random=n_random,
+        chunk=chunk,
+        prior_usage=prior_usage(usage_from),
     )
     counts = write_outputs(
         target,
@@ -386,6 +484,7 @@ def main(
             "n_requested": n,
             "n_processed": len(outcomes),
             "seed": seed,
+            "equal_labels": equal_labels,
             "template": template,
             "shortlist_seed": shortlist_seed,
             "excluded_ids_from": [str(p) for p in exclude_from],
@@ -396,6 +495,8 @@ def main(
             if shortlist == "all"
             else f"{n_fit} fit + {n_random} random",
             "cap": cap,
+            "chunk": chunk,
+            "usage_from": [str(p) for p in usage_from],
             "thinking": thinking,
             "temperature": temperature,
             "max_output_tokens": max_output_tokens,

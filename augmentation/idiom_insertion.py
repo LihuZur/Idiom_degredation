@@ -16,7 +16,7 @@ import json
 import random
 import re
 from collections import Counter
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any
 
@@ -554,17 +554,81 @@ def generate_insert(
     bank_order: str = "fixed",
     n_fit: int = N_FIT,
     n_random: int = N_RANDOM,
+    chunk: int | None = None,
+    prior_usage: Mapping[str, int] | None = None,
 ) -> list[Outcome]:
-    """Items whose original already contains a bank idiom are skipped without an AI call."""
+    """Items whose original already contains a bank idiom are skipped without an AI call.
+
+    `chunk` (plan O53 d, 2026-11-25): items are sent in consecutive groups of this size, and the uses per idiom are
+    updated after each group, so an idiom that reached `cap` is no longer shown to later items (no paid reply wasted
+    on an idiom over the cap). None = all items at once (as in POC-1/2/3; same prompts, so the cache still applies).
+    The order of the groups is the order of `items`, so a rerun builds the same prompts and is served from the
+    cache. `prior_usage`: uses per idiom id from earlier runs of the same study (a top-up run continues the count)."""
     rng = random.Random(seed)
     by_id = {i.idiom_id: i for i in inventory}
     state = InsertState()
-    todo = [i for i in items if not index.find(i.x)]
+    state.usage.update(prior_usage or {})
+    pending = [i for i in items if not index.find(i.x)]
     done: dict[str, Outcome] = {
         i.id: Outcome(i, False, "original_has_idiom", "") for i in items if index.find(i.x)
     }
     history: dict[str, list[str]] = {}
+    size = chunk or max(len(pending), 1)
+    for start in range(0, len(pending), size):
+        _insert_group(
+            pending[start : start + size],
+            inventory,
+            index,
+            complete,
+            retriever,
+            state,
+            done,
+            history,
+            by_id=by_id,
+            rng=rng,
+            model=model,
+            p_hash=p_hash,
+            cap=cap,
+            seed=seed,
+            attempts=attempts,
+            template=template,
+            per_item_seed=per_item_seed,
+            shortlist=shortlist,
+            bank_order=bank_order,
+            n_fit=n_fit,
+            n_random=n_random,
+        )
+    return [done[i.id] for i in items]
+
+
+def _insert_group(
+    todo: list[Item],
+    inventory: Sequence[Idiom],
+    index: IdiomIndex,
+    complete: CompleteFn,
+    retriever: IdiomRetriever | None,
+    state: InsertState,
+    done: dict[str, Outcome],
+    history: dict[str, list[str]],
+    *,
+    by_id: Mapping[str, Idiom],
+    rng: random.Random,
+    model: str,
+    p_hash: str,
+    cap: int,
+    seed: int,
+    attempts: int,
+    template: str,
+    per_item_seed: bool,
+    shortlist: str,
+    bank_order: str,
+    n_fit: int,
+    n_random: int,
+) -> None:
+    """All attempts for one group of items; `state`, `done` and `history` are updated in place."""
     for attempt in range(1, attempts + 1):
+        if not todo:
+            break
         prompts, lists = [], []
         for item in todo:
             open_ = [i for i in inventory if state.usage[i.idiom_id] < cap]
@@ -630,4 +694,3 @@ def generate_insert(
     for item in todo:
         h = history.get(item.id, [])
         done[item.id] = Outcome(item, False, h[-1], "", attempts=attempts, history=tuple(h[:-1]))
-    return [done[i.id] for i in items]

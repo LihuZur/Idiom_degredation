@@ -1,11 +1,15 @@
 """POC-2 pieces (plan v3 §1b, step 8d): the blind generator prompt (O37) and the label-balance report (O39)."""
 
+from collections import Counter
+from pathlib import Path
+
 from augmentation.idiom_generation import Idiom, Item
 from augmentation.idiom_insertion import (
     insert_prompt_hash,
     render_insert_prompt,
 )
 from scripts.checker import label_balance
+from scripts.generate_v3 import earlier_runs, equal_label_sample
 
 _IDIOM = Idiom(
     "7", "7", "spill the beans", ("spill the beans",), ("To reveal a secret.",), "", None, None, None,
@@ -171,3 +175,31 @@ def test_v6_shows_options_unlabelled_and_overlap_check() -> None:
     assert not option_overlap_gained(
         q, "in a nutshell, attitude change is greatest when the level of discrepancy is:", opts
     )
+
+
+def test_equal_label_sample() -> None:
+    pool = [
+        Item("mnli", f"a{k}", "word " * (k % 30 + 1), str(k % 3 if k < 270 else 0), {})
+        for k in range(600)
+    ]
+    got = equal_label_sample(pool, 90, seed=0)
+    assert Counter(i.y for i in got) == {"0": 30, "1": 30, "2": 30}
+    assert got == equal_label_sample(pool, 90, seed=0)
+
+
+def test_earlier_runs_finds_every_attempted_folder(tmp_path: Path) -> None:
+    for rel in (
+        "_exp_a/mnli",
+        "_exp_b/mnli_v2",
+        "mnli_v2",
+        "_exp_a/sst2",
+        "_out/mnli",
+        "_exp_c/mnlix",
+    ):
+        (tmp_path / rel).mkdir(parents=True)
+        (tmp_path / rel / "generation_log.csv").write_text("id\n")
+    got = {
+        p.relative_to(tmp_path).as_posix()
+        for p in earlier_runs(tmp_path, "mnli", tmp_path / "_out/mnli")
+    }
+    assert got == {"_exp_a/mnli", "_exp_b/mnli_v2", "mnli_v2"}

@@ -211,3 +211,42 @@ def test_fixed_bank_order_gives_every_item_the_same_idiom_list(tmp_path: Path) -
     )  # fmt: skip
     lists = [p.split("Idioms (id: idiom - meaning):")[1].split("Text:")[0] for p in prompts]
     assert lists[0] == lists[1]
+
+
+def _listed_ids(prompt: str) -> set[str]:
+    block = prompt.split("Idioms (id: idiom - meaning):")[1].split("Text:", maxsplit=1)[0]
+    return set(re.findall(r"^\s*(\w+): ", block, flags=re.MULTILINE))
+
+
+def test_chunks_stop_showing_an_idiom_that_reached_the_cap(tmp_path: Path) -> None:
+    inv, index = setup_inventory(tmp_path)
+    items = [Item("sst2", f"i{k}", X, "1", {}) for k in range(6)]
+    calls: list[list[str]] = []
+
+    def complete(ps: Sequence[str]) -> list[str | None]:
+        calls.append(list(ps))  # pick idiom 1 whenever it is offered
+        return [_reply() if "1" in _listed_ids(p) else _reply(choice="NONE") for p in ps]
+
+    out = generate_insert(
+        items, inv, index, complete, None, model="m", p_hash="h", cap=2, seed=0, chunk=2,
+        attempts=1, template="idiom_insert_v4.txt", shortlist="all",
+    )  # fmt: skip
+    assert sum(o.ok for o in out) == 2
+    assert len(calls) == 3  # one call per group of 2
+    assert all("1" in _listed_ids(p) for p in calls[0])
+    assert all("1" not in _listed_ids(p) for c in calls[1:] for p in c)
+
+
+def test_prior_usage_counts_towards_the_cap(tmp_path: Path) -> None:
+    inv, index = setup_inventory(tmp_path)
+    prompts: list[str] = []
+
+    def complete(ps: Sequence[str]) -> list[str | None]:
+        prompts.extend(ps)
+        return [_reply(choice="NONE") for _ in ps]
+
+    generate_insert(
+        [Item("sst2", "a", X, "1", {})], inv, index, complete, None, model="m", p_hash="h",
+        cap=2, seed=0, prior_usage={"1": 2}, attempts=1, template="idiom_insert_v4.txt", shortlist="all",
+    )  # fmt: skip
+    assert "1" not in _listed_ids(prompts[0])

@@ -46,6 +46,7 @@ from augmentation.repair import (
     repair_shortlist,
     run_repair,
 )
+from augmentation.selection import Pair, length_bin, length_bins, select_pairs
 
 _DATASETS = ("sst2", "mnli", "mmlu", "agnews", "siqa")
 _CHARS_PER_TOKEN = 4
@@ -527,6 +528,7 @@ def _repair_dry_run(
     )
 
 
+_MIN_KEPT = 0.80  # plan O2, decided 2026-11-25
 _POOL_DIRS = {
     "sst2": "sst2",
     "mnli": "mnli_wide",
@@ -749,6 +751,243 @@ def positions_cmd(runs: tuple[Path, ...]) -> None:
             + " / ".join(f"{x:.0%}" for x in q)
             + f"; {len(c)} distinct idioms in {len(names)} pairs, top-10 share {top10:.0%}"
         )
+
+
+def _pool_info(pools: Path, d: str) -> tuple[dict[str, dict[str, str]], tuple[int, int]]:
+    with (pools / _POOL_DIRS[d] / "original.csv").open(encoding="utf-8", newline="") as f:
+        pool = {r["id"]: r for r in csv.DictReader(f)}
+    return pool, length_bins([len(r["x"].split()) for r in pool.values()])
+
+
+def _stratum(row: Mapping[str, str], d: str, cuts: tuple[int, int]) -> str:
+    b = length_bin(len(row["x"].split()), cuts)
+    if d == "mnli":
+        b += "|" + str(json.loads(row.get("meta") or "{}").get("genre", ""))
+    return b
+
+
+def _pool_shares(
+    pool: Mapping[str, Mapping[str, str]], d: str, cuts: tuple[int, int]
+) -> dict[str, dict[str, float]]:
+    counts: dict[str, Counter[str]] = {}
+    for r in pool.values():
+        counts.setdefault(r["y"], Counter())[_stratum(r, d, cuts)] += 1
+    return {lab: {k: v / sum(c.values()) for k, v in c.items()} for lab, c in counts.items()}
+
+
+def _sha256(path: Path) -> str:
+    import hashlib  # noqa: PLC0415
+
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+@main.command("select")
+@_run_opt
+@click.option("--dataset", type=click.Choice(_DATASETS), required=True)
+@click.option(
+    "--verdicts",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    required=True,
+    help="verdicts.jsonl of the checker run; rejected (or unparsable) pairs are dropped.",
+)
+@click.option("--n", type=int, required=True, help="Final pairs wanted (split evenly over labels).")
+@click.option(
+    "--min-kept", type=float, default=0.80, show_default=True, help="Plan O2 (decided 80%)."
+)
+@click.option(
+    "--cap", type=int, default=5, show_default=True, help="Max pairs per idiom (O53, decided 5)."
+)
+@click.option("--seed", type=int, default=0, show_default=True)
+@click.option("--suffix", default="_full", show_default=True)
+@click.option(
+    "--pools", type=click.Path(path_type=Path), default=Path("datasets_out/wide"), show_default=True
+)
+@click.option(
+    "--out-root", type=click.Path(path_type=Path), default=Path("datasets_out"), show_default=True
+)
+@click.option(
+    "--allow-short",
+    is_flag=True,
+    help="Write the dataset even if a label is short of its quota (default: report and write nothing).",
+)
+def select_cmd(
+    runs: tuple[Path, ...],
+    dataset: str,
+    verdicts: Path,
+    n: int,
+    min_kept: float,
+    cap: int,
+    seed: int,
+    suffix: str,
+    pools: Path,
+    out_root: Path,
+    allow_short: bool,
+) -> None:
+    """Final full-study dataset: words-kept threshold, idiom cap, equal labels, pool-like strata (plan O53)."""
+    accepted = {k for k, v in _load_verdicts(verdicts).items() if not v.rejects}
+    pool, cuts = _pool_info(pools, dataset)
+    pairs: list[Pair] = []
+    rows: dict[str, dict[str, dict[str, str]]] = {
+        "original": {},
+        "idiomatic": {},
+        "span_literal": {},
+    }
+    fields: dict[str, list[str]] = {}
+    for run in runs:
+        folder = run / dataset
+        if not (folder / "idiomatic.csv").exists():
+            continue
+        for version, by_id in rows.items():
+            with (folder / f"{version}.csv").open(encoding="utf-8", newline="") as f:
+                reader = csv.DictReader(f)
+                fields[version] = list(reader.fieldnames or [])
+                by_id.update({r["id"]: r for r in reader})
+    for i, r in rows["idiomatic"].items():
+        if f"{dataset}:{i}" not in accepted or i not in rows["span_literal"] or i not in pool:
+            continue
+        rec = json.loads(r["meta"])["idiom"]
+        pairs.append(
+            Pair(
+                id=i,
+                label=pool[i]["y"],
+                stratum=_stratum(pool[i], dataset, cuts),
+                idiom_id=str(rec["midas_ids"]).split("|")[0],
+                words_kept=float(rec.get("original_words_kept", 1.0)),
+            )
+        )
+    sel = select_pairs(
+        pairs, n, _pool_shares(pool, dataset, cuts), min_kept=min_kept, cap=cap, seed=seed
+    )
+    rep = sel.report
+    click.echo(
+        f"{dataset}: {rep['checked_pairs']} pairs passed the checker; dropped {rep['dropped_words_kept']} "
+        f"(words kept < {min_kept:.0%}), {rep['dropped_idiom_cap']} (idiom cap {cap}); selected {rep['selected']} of {n}"
+    )
+    for lab, v in rep["per_label"].items():
+        short = f"  SHORT BY {v['short_by']}" if v["short_by"] else ""
+        click.echo(
+            f"  label {lab}: quota {v['quota']}, available {v['available']}, selected {v['selected']}{short}"
+        )
+    if not sel.complete and not allow_short:
+        raise click.ClickException(
+            "a label is short of its quota: generate more items (a top-up run with --usage-from and "
+            "--exclude-ids-from), or pass --allow-short; nothing written"
+        )
+    target = out_root / f"{dataset}{suffix}"
+    target.mkdir(parents=True, exist_ok=True)
+    wanted = set(sel.ids)
+    manifest: dict[str, Any] = {
+        "dataset": dataset,
+        "runs": [str(r) for r in runs],
+        "verdicts": str(verdicts),
+        "verdicts_sha256": _sha256(verdicts),
+        "n": n,
+        "min_kept": min_kept,
+        "cap": cap,
+        "seed": seed,
+        "report": rep,
+        "files": {},
+    }
+    for version, rs in rows.items():
+        path = target / f"{version}.csv"
+        with path.open("w", encoding="utf-8", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=fields[version])
+            w.writeheader()
+            w.writerows(rs[i] for i in sorted(wanted))
+        manifest["files"][path.name] = _sha256(path)
+    (target / "selection_manifest.json").write_text(
+        json.dumps(manifest, indent=1), encoding="utf-8"
+    )
+    click.echo(f"-> {target} (file hashes in selection_manifest.json; freeze before evaluation)")
+
+
+@main.command("gates")
+@click.option(
+    "--data",
+    "data_dir",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    required=True,
+    help="A final dataset folder written by `select` (e.g. datasets_out/mnli_full).",
+)
+@click.option("--dataset", type=click.Choice(_DATASETS), required=True)
+@click.option(
+    "--pools", type=click.Path(path_type=Path), default=Path("datasets_out/wide"), show_default=True
+)
+def gates_cmd(data_dir: Path, dataset: str, pools: Path) -> None:
+    """Data-only reports to read before any model is run (plan O53 f): labels, strata vs pool, words kept, idiom
+    reuse, list positions, idiom properties vs the bank, file hashes. Nothing is removed."""
+    from scipy.stats import chisquare  # noqa: PLC0415
+
+    from augmentation.idiom_generation import load_inventory  # noqa: PLC0415
+    from data.norms.inventory import DEFAULT_FINAL_PATH, DEFAULT_MAGPIE_EXT_PATH  # noqa: PLC0415
+
+    pool, cuts = _pool_info(pools, dataset)
+    with (data_dir / "idiomatic.csv").open(encoding="utf-8", newline="") as f:
+        idi = list(csv.DictReader(f))
+    recs = [json.loads(r["meta"])["idiom"] for r in idi]
+    labels = Counter(pool[r["id"]]["y"] for r in idi)
+    p_lab = float(chisquare(list(labels.values())).pvalue) if len(labels) > 1 else float("nan")
+    click.echo(f"1. labels: {dict(sorted(labels.items()))}  (χ² p vs equal = {p_lab:.2f})")
+    shares = _pool_shares(pool, dataset, cuts)
+    for lab in sorted(labels):
+        got = Counter(
+            _stratum(pool[r["id"]], dataset, cuts) for r in idi if pool[r["id"]]["y"] == lab
+        )
+        keys = sorted(shares[lab])
+        exp = [shares[lab][k] * labels[lab] for k in keys]
+        p = float(chisquare([got[k] for k in keys], exp).pvalue) if len(keys) > 1 else float("nan")
+        worst = max(keys, key=lambda k: abs(got[k] - shares[lab][k] * labels[lab]))
+        click.echo(
+            f"2. label {lab}: strata vs pool χ² p = {p:.2f}; largest gap {worst}: "
+            f"{got[worst]} vs {shares[lab][worst] * labels[lab]:.1f} expected"
+        )
+    kept = sorted(float(x.get("original_words_kept", 1.0)) for x in recs)
+    click.echo(
+        f"3. words kept: min {kept[0]:.2f}, median {kept[len(kept) // 2]:.2f}, below {_MIN_KEPT:.2f}: {sum(k < _MIN_KEPT for k in kept)}"
+    )
+    uses = Counter(str(x["midas_ids"]).split("|")[0] for x in recs)
+    top10 = sum(v for _, v in uses.most_common(10)) / len(recs)
+    click.echo(
+        f"4. idioms: {len(uses)} distinct in {len(recs)} pairs; max uses {max(uses.values())}; top-10 share {top10:.0%}"
+    )
+    pos = [
+        list(x["shown_ids"]).index(str(x["midas_ids"]).split("|")[0]) / len(x["shown_ids"])
+        for x in recs
+        if x.get("shown_ids") and str(x["midas_ids"]).split("|")[0] in x["shown_ids"]
+    ]
+    q = [sum(a <= v < a + 0.25 for v in pos) for a in (0, 0.25, 0.5, 0.75)]
+    p_pos = float(chisquare(q).pvalue) if sum(q) else float("nan")
+    click.echo(
+        f"5. position of the chosen idiom in the list shown (quarters, top first): {q} (χ² p vs even = {p_pos:.2f})"
+    )
+    inv = DEFAULT_FINAL_PATH.parent
+    bank, _ = load_inventory(
+        DEFAULT_FINAL_PATH,
+        impli_csv=inv / "impli_gloss_seed.csv",
+        domains_csv=[inv / "idiom_domains.csv", inv / "idiom_domains_magpie.csv"],
+        extra_csvs=[DEFAULT_MAGPIE_EXT_PATH],
+    )
+    by_id = {b.idiom_id: b for b in bank}
+    picked = [by_id[i] for i in uses.elements() if i in by_id]
+
+    def _mean(xs: Sequence[float | None]) -> str:
+        v = [x for x in xs if x is not None]
+        return f"{sum(v) / len(v):.2f} (n {len(v)})" if v else "-"
+
+    for prop in ("log_freq", "familiarity", "opacity"):
+        click.echo(
+            f"6. {prop}: picked {_mean([getattr(b, prop) for b in picked])} vs bank {_mean([getattr(b, prop) for b in bank])}"
+        )
+    dom_p, dom_b = Counter(b.domain for b in picked), Counter(b.domain for b in bank)
+    click.echo(
+        "6. domain share picked / bank: "
+        + ", ".join(
+            f"{k}: {dom_p[k] / len(picked):.0%} / {dom_b[k] / len(bank):.0%}"
+            for k in sorted(dom_b, key=str)
+        )
+    )
+    for f in sorted(data_dir.glob("*.csv")):
+        click.echo(f"7. sha256 {f.name}: {_sha256(f)}")
 
 
 if __name__ == "__main__":
