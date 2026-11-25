@@ -781,6 +781,68 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+@main.command("combine")
+@click.option(
+    "--verdicts",
+    "verdict_files",
+    multiple=True,
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="verdicts.jsonl of checker runs (repeatable; e.g. the main run and a top-up).",
+)
+@click.option(
+    "--review",
+    "review_files",
+    multiple=True,
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="Second reviewer CSV(s) with columns key and action (valid / fix / invalid); repeatable.",
+)
+@click.option("--out", type=click.Path(dir_okay=False, path_type=Path), required=True)
+def combine_cmd(verdict_files: tuple[Path, ...], review_files: tuple[Path, ...], out: Path) -> None:
+    """One verdicts.jsonl where a pair passes only if the checker AND the second review pass it (plan O53 e)."""
+    checker: dict[str, Verdict] = {}
+    for f in verdict_files:
+        checker.update(_load_verdicts(f))
+    review: dict[str, str] = {}
+    for f in review_files:
+        with f.open(encoding="utf-8", newline="") as fh:
+            for r in csv.DictReader(fh):
+                if r["key"] in review:
+                    raise click.ClickException(f"{r['key']} appears in more than one review file")
+                review[r["key"]] = r["action"]
+    missing = sorted(set(checker) ^ set(review))
+    if missing:
+        raise click.ClickException(
+            f"{len(missing)} keys in only one of checker / review, e.g. {missing[:3]}"
+        )
+    out.parent.mkdir(parents=True, exist_ok=True)
+    counts: Counter[str] = Counter()
+    with out.open("w", encoding="utf-8") as f:
+        for key in sorted(checker):
+            v = checker[key]
+            rev_ok = review[key] == "valid"
+            counts[
+                ("pass" if not v.rejects else "reject") + "/" + ("pass" if rev_ok else "reject")
+            ] += 1
+            action = v.action if v.rejects else ("valid" if rev_ok else "fix")
+            reason = v.primary_reason if v.rejects else ("none" if rev_ok else "second_review")
+            row = {
+                "key": key,
+                "ok": v.ok,
+                "steps": v.steps,
+                "reasons": v.reasons,
+                "naturalness": v.naturalness,
+                "action": action,
+                "primary_reason": reason,
+                "error": v.error,
+            }
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
+    click.echo(
+        f"checker/review: {dict(sorted(counts.items()))}; both pass: {counts['pass/pass']} -> {out}"
+    )
+
+
 @main.command("select")
 @_run_opt
 @click.option("--dataset", type=click.Choice(_DATASETS), required=True)

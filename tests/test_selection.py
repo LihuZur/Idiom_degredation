@@ -1,6 +1,11 @@
+import json
 from collections import Counter
+from pathlib import Path
+
+from click.testing import CliRunner
 
 from augmentation.selection import Pair, allocate, length_bin, select_pairs
+from scripts.checker import main
 
 
 def test_allocate_largest_remainder():
@@ -72,3 +77,31 @@ def test_short_stratum_is_filled_from_the_same_label():
     sel = select_pairs(pairs, 8, {"0": {"short": 0.5, "long": 0.5}}, seed=0)
     assert sel.complete and len(sel.ids) == 8
     assert sum(i.startswith("a") for i in sel.ids) == 2
+
+
+def test_combine_passes_only_when_checker_and_review_both_pass(tmp_path: Path) -> None:
+    base = {"ok": True, "reasons": {}, "naturalness": "3", "error": ""}
+    steps_ok = dict.fromkeys(("step1_label", "step2_idiom", "step3_literal", "step4_rest"), "pass")
+    rows = [
+        {"key": "mnli:a", "steps": steps_ok, "action": "valid", "primary_reason": "none"},
+        {"key": "mnli:b", "steps": steps_ok, "action": "valid", "primary_reason": "none"},
+        {
+            "key": "mnli:c",
+            "steps": {**steps_ok, "step1_label": "fail"},
+            "action": "invalid",
+            "primary_reason": "label_changed",
+        },
+    ]
+    v = tmp_path / "verdicts.jsonl"
+    v.write_text("".join(json.dumps(base | r) + "\n" for r in rows))
+    rev = tmp_path / "review.csv"
+    rev.write_text("key,action\nmnli:a,valid\nmnli:b,fix\nmnli:c,valid\n")
+    out = tmp_path / "combined.jsonl"
+    res = CliRunner().invoke(
+        main, ["combine", "--verdicts", str(v), "--review", str(rev), "--out", str(out)]
+    )
+    assert res.exit_code == 0, res.output
+    got = {
+        json.loads(line)["key"]: json.loads(line)["action"] for line in out.read_text().splitlines()
+    }
+    assert got == {"mnli:a": "valid", "mnli:b": "fix", "mnli:c": "invalid"}
