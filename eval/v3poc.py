@@ -64,3 +64,10 @@ class MnliV3Poc3Evaluator(MnliEvaluator):
 @register_evaluator("agnews_v3poc3")
 class AgNewsV3Poc3Evaluator(AgNewsEvaluator):
     dataset = "agnews_v3poc3"
+
+
+# Full study, MNLI (plan v3 O53, 2026-11-25): 795 pairs (265 per label) that passed luna (3 votes) and the blind AI
+# review, words kept >= 80%, at most 5 per idiom. Same prompt and parser as POC-3, so the two are comparable.
+@register_evaluator("mnli_full")
+class MnliFullEvaluator(MnliEvaluator):
+    dataset = "mnli_full"
