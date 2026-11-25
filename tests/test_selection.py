@@ -5,7 +5,7 @@ from pathlib import Path
 from click.testing import CliRunner
 
 from augmentation.selection import Pair, allocate, length_bin, select_pairs
-from scripts.checker import main
+from scripts.checker import main, position_bins
 
 
 def test_allocate_largest_remainder():
@@ -105,3 +105,11 @@ def test_combine_passes_only_when_checker_and_review_both_pass(tmp_path: Path) -
         json.loads(line)["key"]: json.loads(line)["action"] for line in out.read_text().splitlines()
     }
     assert got == {"mnli:a": "valid", "mnli:b": "fix", "mnli:c": "invalid"}
+
+
+def test_position_bins_expect_block_sizes() -> None:
+    obs, exp = position_bins([(0, 30), (29, 30), (14, 30)])
+    assert obs == [1, 0, 1, 0, 1]
+    assert [round(e, 6) for e in exp] == [0.6] * 5
+    obs, exp = position_bins([(0, 8)] * 8, n_bins=4)  # 8 positions in 4 blocks of 2
+    assert obs == [8, 0, 0, 0] and [round(e, 6) for e in exp] == [2.0] * 4

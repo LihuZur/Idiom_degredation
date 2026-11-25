@@ -775,6 +775,20 @@ def _pool_shares(
     return {lab: {k: v / sum(c.values()) for k, v in c.items()} for lab, c in counts.items()}
 
 
+def position_bins(
+    picks: Sequence[tuple[int, int]], n_bins: int = 5
+) -> tuple[list[int], list[float]]:
+    """Chosen-idiom positions (index, list length) counted in `n_bins` blocks of the list, with the counts expected
+    if the choice ignored position (each block's share = the positions it holds / list length)."""
+    obs = [0] * n_bins
+    exp = [0.0] * n_bins
+    for idx, length in picks:
+        obs[min(n_bins - 1, idx * n_bins // length)] += 1
+        for k in range(length):
+            exp[min(n_bins - 1, k * n_bins // length)] += 1 / length
+    return obs, exp
+
+
 def _sha256(path: Path) -> str:
     import hashlib  # noqa: PLC0415
 
@@ -1012,15 +1026,16 @@ def gates_cmd(data_dir: Path, dataset: str, pools: Path) -> None:
     click.echo(
         f"4. idioms: {len(uses)} distinct in {len(recs)} pairs; max uses {max(uses.values())}; top-10 share {top10:.0%}"
     )
-    pos = [
-        list(x["shown_ids"]).index(str(x["midas_ids"]).split("|")[0]) / len(x["shown_ids"])
+    picks = [
+        (list(x["shown_ids"]).index(str(x["midas_ids"]).split("|")[0]), len(x["shown_ids"]))
         for x in recs
         if x.get("shown_ids") and str(x["midas_ids"]).split("|")[0] in x["shown_ids"]
     ]
-    q = [sum(a <= v < a + 0.25 for v in pos) for a in (0, 0.25, 0.5, 0.75)]
-    p_pos = float(chisquare(q).pvalue) if sum(q) else float("nan")
+    q, exp = position_bins(picks)
+    p_pos = float(chisquare(q, exp).pvalue) if sum(q) else float("nan")
     click.echo(
-        f"5. position of the chosen idiom in the list shown (quarters, top first): {q} (χ² p vs even = {p_pos:.2f})"
+        f"5. position of the chosen idiom in the list shown (5 equal blocks, top first): {q} "
+        f"(expected {[round(e, 1) for e in exp]}; χ² p = {p_pos:.3f})"
     )
     inv = DEFAULT_FINAL_PATH.parent
     bank, _ = load_inventory(
